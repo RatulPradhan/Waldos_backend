@@ -10,7 +10,7 @@ import {
 	getUserByEmail,
 	getUsers,
 	insertData,
-	getPasswordByEmail
+	getPasswordByEmail,
 } from "./database.js";
 
 const app = express();
@@ -27,7 +27,7 @@ app.get("/password/:email", async (req, res) => {
 	const email = req.params.email;
 	const password = await getPasswordByEmail(email);
 	res.send(password);
-})
+});
 
 // post's http
 app.get("/posts", async (req, res) => {
