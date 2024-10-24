@@ -29,11 +29,6 @@ export async function getUser(username) {
 	return rows;
 }
 
-export async function getPasswordByEmail(email){
-	const [rows] = await db.query(`SELECT password FROM user where email = ?`, [email]);
-	return rows;
-}
-
 export async function getUserByEmail(email) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE email = ?`, [email]);
 	return rows;
@@ -54,6 +49,11 @@ export async function createUser(username, email, password, type) {
 
 // post's functions
 export async function createPost(user_id, channel_id, title, content) {
+	// testing code
+	// console.log("user_id:", user_id);
+  	// console.log("channel_id:", channel_id);
+  	// console.log("title:", title);
+  	// console.log("content:", content);
 	const query = `INSERT INTO post (user_id, channel_id, title, content) VALUES (?, ?, ?, ?)`;
 
 	try {
@@ -85,7 +85,11 @@ export async function getPost(id) {
 }
 
 export async function getAllPosts() {
-	const query = `SELECT * FROM post ORDER BY created_at DESC`;
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
+		FROM post
+		JOIN user ON post.user_id = user.user_id
+		ORDER BY post.created_at DESC`;
 
 	try {
 		const [rows] = await db.execute(query);
@@ -99,6 +103,7 @@ export async function getAllPosts() {
 // comment's function
 
 export async function createComment(postId, userId, content, parent_id = null) {
+
 	const query = `INSERT INTO comment (post_id, user_id, content, parent_id)
                  VALUES (?, ?, ?, ?)`;
 	try {
@@ -129,25 +134,53 @@ export async function getComment(id) {
 	return rows[0];
 }
 
-export async function getPostWithComments(postId) {
+
+  export async function getPostWithComments(post_id) {
 	const postQuery = `SELECT * FROM post WHERE post_id = ?`;
-
-	const commentsQuery =
-		"SELECT * FROM comment WHERE post_id = ? ORDER BY created_at ASC";
-
+	const commentsQuery = `
+	  SELECT comment.comment_id, comment.post_id, comment.user_id, comment.parent_id, comment.content, comment.created_at, user.username
+	  FROM comment
+	  JOIN user ON comment.user_id = user.user_id
+	  WHERE comment.post_id = ?
+	  ORDER BY comment.created_at ASC
+	`;
+  
 	try {
-		const [postResult] = await db.execute(postQuery, [postId]);
-		const [commentsResult] = await db.execute(commentsQuery, [postId]);
+	 
+	  const [postResult] = await db.execute(postQuery, [post_id]);
+	  const [commentsResult] = await db.execute(commentsQuery, [post_id]);
+  
+	  if (!postResult.length) {
+		throw new Error(`Post with id ${post_id} not found`);
+	  }
+  
+	  const post = postResult[0]; 
+  
+	  const commentsByParentId = commentsResult.reduce((acc, comment) => {
+		const parentId = comment.parent_id || null;
+		if (!acc[parentId]) {
+		  acc[parentId] = [];
+		}
+		acc[parentId].push(comment);
+		return acc;
+	  }, {});
+  
+	  const topLevelComments = commentsByParentId[null] || [];
+  
+	  topLevelComments.forEach(comment => {
+		comment.replies = commentsByParentId[comment.comment_id] || [];
+	  });
 
-		const post = postResult[0];
-		const comments = commentsResult;
-
-		return { post, comments };
+	  // num of total comments
+	  const totalComments = commentsResult.length;
+  
+	  return { post, comments: topLevelComments, totalComments };
 	} catch (error) {
-		console.error("Error fetching post and comments:", error);
-		throw new Error("Database error: Could not fetch post and comments");
+	  console.error("Error retrieving post and comments:", error);
+	  throw new Error("Database error: Could not retrieve post and comments");
 	}
-}
+  }
+  
 
 // Function to test getUsers
 async function testGetUsers() {
