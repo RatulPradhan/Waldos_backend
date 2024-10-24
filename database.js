@@ -63,6 +63,11 @@ export async function createUser(username, email, password, type) {
 
 // post's functions
 export async function createPost(user_id, channel_id, title, content) {
+	// testing code
+	// console.log("user_id:", user_id);
+  	// console.log("channel_id:", channel_id);
+  	// console.log("title:", title);
+  	// console.log("content:", content);
 	const query = `INSERT INTO post (user_id, channel_id, title, content) VALUES (?, ?, ?, ?)`;
 
 	try {
@@ -112,6 +117,7 @@ export async function getAllPosts() {
 // comment's function
 
 export async function createComment(postId, userId, content, parent_id = null) {
+
 	const query = `INSERT INTO comment (post_id, user_id, content, parent_id)
                  VALUES (?, ?, ?, ?)`;
 	try {
@@ -152,7 +158,7 @@ export async function getPostWithComments(post_id) {
 	WHERE comment.post_id = ?
 	ORDER BY comment.created_at ASC
   `;
-
+  
 	try {
 		const [postResult] = await db.execute(postQuery, [post_id]);
 		const [commentsResult] = await db.execute(commentsQuery, [post_id]);
@@ -186,7 +192,8 @@ export async function getPostWithComments(post_id) {
 		console.error("Error retrieving post and comments:", error);
 		throw new Error("Database error: Could not retrieve post and comments");
 	}
-}
+  }
+  
 
 // Function to test getUsers
 async function testGetUsers() {
