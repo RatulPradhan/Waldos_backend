@@ -3,6 +3,13 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+export async function getPasswordByEmail(email) {
+	const [rows] = await db.query(`SELECT password FROM user where email = ?`, [
+		email,
+	]);
+	return rows;
+}
+
 const db = mysql
 	.createPool({
 		host: process.env.DB_HOST,
@@ -25,6 +32,13 @@ export async function getUserByID(id) {
 export async function getUser(username) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE username = ?`, [
 		username,
+	]);
+	return rows;
+}
+
+export async function getPasswordByEmail(email) {
+	const [rows] = await db.query(`SELECT password FROM user where email = ?`, [
+		email,
 	]);
 	return rows;
 }
@@ -134,50 +148,49 @@ export async function getComment(id) {
 	return rows[0];
 }
 
-
-  export async function getPostWithComments(post_id) {
+export async function getPostWithComments(post_id) {
 	const postQuery = `SELECT * FROM post WHERE post_id = ?`;
+
 	const commentsQuery = `
-	  SELECT comment.comment_id, comment.post_id, comment.user_id, comment.parent_id, comment.content, comment.created_at, user.username
-	  FROM comment
-	  JOIN user ON comment.user_id = user.user_id
-	  WHERE comment.post_id = ?
-	  ORDER BY comment.created_at ASC
-	`;
+	SELECT comment.comment_id, comment.post_id, comment.user_id, comment.parent_id, comment.content, comment.created_at, user.username
+	FROM comment
+	JOIN user ON comment.user_id = user.user_id
+	WHERE comment.post_id = ?
+	ORDER BY comment.created_at ASC
+  `;
   
 	try {
-	 
-	  const [postResult] = await db.execute(postQuery, [post_id]);
-	  const [commentsResult] = await db.execute(commentsQuery, [post_id]);
-  
-	  if (!postResult.length) {
-		throw new Error(`Post with id ${post_id} not found`);
-	  }
-  
-	  const post = postResult[0]; 
-  
-	  const commentsByParentId = commentsResult.reduce((acc, comment) => {
-		const parentId = comment.parent_id || null;
-		if (!acc[parentId]) {
-		  acc[parentId] = [];
-		}
-		acc[parentId].push(comment);
-		return acc;
-	  }, {});
-  
-	  const topLevelComments = commentsByParentId[null] || [];
-  
-	  topLevelComments.forEach(comment => {
-		comment.replies = commentsByParentId[comment.comment_id] || [];
-	  });
+		const [postResult] = await db.execute(postQuery, [post_id]);
+		const [commentsResult] = await db.execute(commentsQuery, [post_id]);
 
-	  // num of total comments
-	  const totalComments = commentsResult.length;
-  
-	  return { post, comments: topLevelComments, totalComments };
+		if (!postResult.length) {
+			throw new Error(`Post with id ${post_id} not found`);
+		}
+
+		const post = postResult[0];
+
+		const commentsByParentId = commentsResult.reduce((acc, comment) => {
+			const parentId = comment.parent_id || null;
+			if (!acc[parentId]) {
+				acc[parentId] = [];
+			}
+			acc[parentId].push(comment);
+			return acc;
+		}, {});
+
+		const topLevelComments = commentsByParentId[null] || [];
+
+		topLevelComments.forEach((comment) => {
+			comment.replies = commentsByParentId[comment.comment_id] || [];
+		});
+
+		// num of total comments
+		const totalComments = commentsResult.length;
+
+		return { post, comments: topLevelComments, totalComments };
 	} catch (error) {
-	  console.error("Error retrieving post and comments:", error);
-	  throw new Error("Database error: Could not retrieve post and comments");
+		console.error("Error retrieving post and comments:", error);
+		throw new Error("Database error: Could not retrieve post and comments");
 	}
   }
   

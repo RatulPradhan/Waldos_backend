@@ -28,3 +28,9 @@ export async function sendEmail(to, subject, text) {
 		console.error("Error sending email:", error);
 	}
 }
+
+export async function sendVerificationEmail(to, token) {
+	const subject = "Verify your email";
+	const text = `Click the following link to verify your email: ${process.env.FRONTEND_URL}/verify-email/${token}`;
+	await sendEmail(to, subject, text);
+}
