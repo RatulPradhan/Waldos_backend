@@ -29,6 +29,11 @@ export async function getUser(username) {
 	return rows;
 }
 
+export async function getPasswordByEmail(email){
+	const [rows] = await db.query(`SELECT password FROM user where email = ?`, [email]);
+	return rows;
+}
+
 export async function getUserByEmail(email) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE email = ?`, [email]);
 	return rows;
