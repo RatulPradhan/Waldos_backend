@@ -11,6 +11,8 @@ import {
 	getUsers,
 	insertData,
 	getPasswordByEmail,
+	deletePost, 
+	updatePost
 } from "./database.js";
 
 const app = express();
@@ -39,6 +41,33 @@ app.post("/posts", async (req, res) => {
 	const { user_id, channel_id, title, content } = req.body;
 	const post = await createPost(user_id, channel_id, title, content);
 	res.status(201).send(post);
+});
+
+// update post
+app.put('/posts/:id', async (req, res) => {
+    const postId = req.params.id;
+    const { title, content } = req.body;
+
+    try {
+        // Use the helper function to update the post
+        await updatePost(postId, title, content);
+        res.status(200).json({ message: 'Post updated successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Error updating post', error: err.message });
+    }
+});
+
+//delete post
+app.delete('/posts/:id', async (req, res) => {
+    const postId = req.params.id;
+
+    try {
+        // Use the helper function to delete the post
+        await deletePost(postId);
+        res.status(200).json({ message: 'Post deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Error deleting post', error: err.message });
+    }
 });
 
 // comment's http
