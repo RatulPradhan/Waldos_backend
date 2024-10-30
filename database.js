@@ -107,6 +107,20 @@ export async function getAllPosts() {
 	}
 }
 
+//delete post
+export async function deletePost(post_id) {
+	const query = "DELETE FROM post WHERE post_id = ?";
+
+	return db.execute(query, [post_id]);
+}
+
+//update post
+export async function updatePost(post_id, title, content) {
+    const query = 'UPDATE post SET title = ?, content = ? WHERE post_id = ?';
+    return db.execute(query, [title, content, post_id]);
+}
+
+
 // comment's function
 
 export async function createComment(postId, userId, content, parent_id = null) {
