@@ -91,6 +91,12 @@ export async function getPost(id) {
 	return rows[0];
 }
 
+export async function getPostsByChannel(channel_id){
+	const [rows] = await db.query(`SELECT * FROM post WHERE channel_id = ?`, [channel_id]
+	);
+	return rows[0]
+}
+
 export async function getAllPosts() {
 	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
