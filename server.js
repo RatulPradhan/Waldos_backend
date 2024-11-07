@@ -75,6 +75,7 @@ app.post('/reports', async (req, res) => {
 	  console.error('Error submitting report:', error);
 	  res.status(500).json({ message: 'Failed to submit report', error: error.message });
 	}
+});
 
 app.delete("/unban-user", async (req, res) => {
   const { email } = req.body; // Expecting the email to be sent in the request body
