@@ -16,7 +16,10 @@ import {
 	getCeramicPost,
 	getPrintmakingPost,
 	getFilmPost,
-	addReport
+	addReport,
+  getBannedUserEmails,
+  removeUserFromBanList,
+  banUser
 } from "./database.js";
 
 const app = express();
@@ -28,6 +31,16 @@ app.get("/user/:email", async (req, res) => {
 	const user = await getUserByEmail(email);
 	res.send(user);
 });
+
+app.get("/banned_users", async (req, res) => {
+  const user = await getBannedUserEmails();
+  res.send(user);
+});
+
+app.get("/users", async (req, res) => {
+	const user = await getUsers();
+	res.send(user);
+})
 
 app.get("/password/:email", async (req, res) => {
 	const email = req.params.email;
@@ -63,6 +76,43 @@ app.post('/reports', async (req, res) => {
 	  res.status(500).json({ message: 'Failed to submit report', error: error.message });
 	}
 
+app.delete("/unban-user", async (req, res) => {
+  const { email } = req.body; // Expecting the email to be sent in the request body
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  try {
+    const result = await removeUserFromBanList(email);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "User not found in ban list" });
+    }
+    res.status(200).json({ message: "User unbanned successfully" });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Failed to unban user", error: error.message });
+  }
+});
+
+app.post("/ban-user", async (req, res) => {
+  const { email } = req.body; // Expecting the email to be sent in the request body
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  try {
+    await banUser(email); // Call the function to ban the user
+    res.status(201).json({ message: "User banned successfully" });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Failed to ban user", error: error.message });
+  }
 });
 
 // post's http
