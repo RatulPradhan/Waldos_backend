@@ -3,16 +3,20 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import { sendEmail } from "./email.js";
 import {
-  getAllPosts,
-  createPost,
-  createComment,
-  getPostWithComments,
-  getUserByEmail,
-  getUsers,
-  insertData,
-  getPasswordByEmail,
-  deletePost,
-  updatePost,
+	getAllPosts,
+	createPost,
+	createComment,
+	getPostWithComments,
+	getUserByEmail,
+	getUsers,
+	insertData,
+	getPasswordByEmail,
+	deletePost, 
+	updatePost,
+	getCeramicPost,
+	getPrintmakingPost,
+	getFilmPost,
+	addReport,
   getBannedUserEmails,
   removeUserFromBanList,
   banUser
@@ -43,6 +47,34 @@ app.get("/password/:email", async (req, res) => {
 	const password = await getPasswordByEmail(email);
 	res.send(password);
 });
+
+//filter channel
+app.get("/ceramic", async (req, res) => {
+	const ceramicPosts = await getCeramicPost();
+	res.send(ceramicPosts);
+});
+
+app.get("/printmaking", async (req, res) => {
+	const printmakingPosts = await getPrintmakingPost();
+	res.send(printmakingPosts);
+});
+
+app.get("/film", async (req, res) => {
+	const filmPosts = await getFilmPost();
+	res.send(filmPosts);
+});
+
+//add report
+app.post('/reports', async (req, res) => {
+	const { post_id, reported_by, reason } = req.body;
+  
+	try {
+	  await addReport(post_id, reported_by, reason); 
+	  res.status(201).json({ message: 'Report submitted successfully' });
+	} catch (error) {
+	  console.error('Error submitting report:', error);
+	  res.status(500).json({ message: 'Failed to submit report', error: error.message });
+	}
 
 app.delete("/unban-user", async (req, res) => {
   const { email } = req.body; // Expecting the email to be sent in the request body
