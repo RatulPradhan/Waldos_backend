@@ -17,6 +17,23 @@ export async function getUsers() {
 	return rows;
 }
 
+export async function getBannedUserEmails() {
+	const [rows] = await db.query("SELECT email FROM banned_users;");
+	return rows;
+}
+
+export async function removeUserFromBanList(email) {
+  const query = `DELETE FROM banned_users WHERE email = ?`;
+  try {
+    const result = await db.execute(query, [email]);
+    return result;
+  } catch (error) {
+    console.error("Error removing user from ban list:", error);
+    throw new Error("Database error: Could not remove user from ban list");
+  }
+}
+
+
 export async function getUserByID(id) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE user_id = ?`, [id]);
 	return rows;
@@ -28,6 +45,19 @@ export async function getUser(username) {
 	]);
 	return rows;
 }
+
+export async function banUser(email) {
+  const result = await db.query(
+    `
+    INSERT INTO banned_users (email)
+    VALUES (?)
+    `,
+    [email]
+  );
+  const rEmail = result.email;
+  return getUser(rEmail);
+}
+
 
 export async function getPasswordByEmail(email) {
 	const [rows] = await db.query(`SELECT password FROM user where email = ?`, [
@@ -52,6 +82,29 @@ export async function createUser(username, email, password, type) {
 	);
 	const id = result.user_id;
 	return getUser(id);
+}
+
+export async function getEvents() {
+  const [rows] = await db.query("SELECT * FROM event;");
+  return rows;
+}
+
+export async function createEvent(name, description, status, event_at) {
+  const query = `INSERT INTO post (name, description, status, event_at) VALUES (?, ?, ?, ?)`;
+
+  try {
+    const [result] = await db.execute(query, [
+      name,
+      description,
+      status,
+      event_at,
+    ]);
+    const id = result.insertId;
+    return getPost(id);
+  } catch (error) {
+    console.error("Error saving post:", error);
+    throw new Error("Database error: Could not save post");
+  }
 }
 
 // post's functions
