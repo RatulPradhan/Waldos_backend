@@ -206,6 +206,35 @@ export async function getPostWithComments(post_id) {
 	}
 }
 
+//function to filter channel
+export async function getCeramicPost() {
+	const query = 'SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username FROM post JOIN user ON post.user_id = user.user_id WHERE post.channel_id = 2 ORDER BY post.created_at DESC';
+
+	const [rows] = await db.execute(query);
+	return rows;
+}
+
+export async function getPrintmakingPost() {
+	const query = 'SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username FROM post JOIN user ON post.user_id = user.user_id WHERE post.channel_id = 3 ORDER BY post.created_at DESC';
+
+	const [rows] = await db.execute(query);
+	return rows;
+}
+
+export async function getFilmPost() {
+	const query = 'SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username FROM post JOIN user ON post.user_id = user.user_id WHERE post.channel_id = 4 ORDER BY post.created_at DESC';
+
+	const [rows] = await db.execute(query);
+	return rows;
+}
+
+// function to add report
+export async function addReport(postId, reportedBy, reason) {
+	const query = 'INSERT INTO reports (post_id, reported_by, reason, status) VALUES (?, ?, ?, ?)';
+	const params = [postId, reportedBy, reason, 'pending'];
+	return db.execute(query, params);
+}
+
 // Function to test getUsers
 async function testGetUsers() {
 	try {
