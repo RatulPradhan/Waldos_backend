@@ -1,5 +1,6 @@
 import mysql from "mysql2";
 import dotenv from "dotenv";
+import { format } from "date-fns";
 
 dotenv.config();
 
@@ -17,9 +18,31 @@ export async function getUsers() {
 	return rows;
 }
 
+export async function getUnbannedUsers() {
+  const [rows] = await db.query(`
+    SELECT * 
+    FROM user
+    WHERE email NOT IN (SELECT email FROM banned_users);
+  `);
+  return rows;
+}
+
+
 export async function getBannedUserEmails() {
 	const [rows] = await db.query("SELECT email FROM banned_users;");
 	return rows;
+}
+
+export async function getAllReports() {
+  const [report] = await db.query("SELECT * FROM reports;");
+  const [c_report] = await db.query("SELECT * FROM reportComment;");
+
+  // Combine the dictionaries by their index positions
+  const combinedReports = report.map((item, index) => {
+    return { ...item, ...(c_report[index] || {}) };
+  });
+
+  return combinedReports;
 }
 
 export async function removeUserFromBanList(email) {
@@ -89,15 +112,33 @@ export async function getEvents() {
   return rows;
 }
 
-export async function createEvent(name, description, status, event_at) {
-  const query = `INSERT INTO post (name, description, status, event_at) VALUES (?, ?, ?, ?)`;
+export async function getOngoingUpcomingEvents() {
+  const [rows] = await db.query("SELECT * FROM event WHERE status = 'ongoing' OR status = 'upcoming';");
+  return rows;
+}
+
+// Helper function to format the datetime for MySQL
+function formatDateForMySQL(date) {
+  return format(new Date(date), 'yyyy-MM-dd HH:mm:ss');
+}
+
+// In your `createEvent` function or wherever you call it
+export async function createEvent(name, description, status, event_at, event_end_at) {
+  // Format the event_at datetime for MySQL
+  console.log(event_at)
+  console.log(event_end_at);
+  const formattedEventAt = formatDateForMySQL(event_at);
+  const formattedEventEndAt = formatDateForMySQL(event_end_at);
+
+  const query = `INSERT INTO event (name, description, status, event_at, event_end_at) VALUES (?, ?, ?, ?, ?)`;
 
   try {
     const [result] = await db.execute(query, [
       name,
       description,
       status,
-      event_at,
+      formattedEventAt, // Use the formatted datetime
+	  formattedEventEndAt
     ]);
     const id = result.insertId;
     return getPost(id);
@@ -106,6 +147,7 @@ export async function createEvent(name, description, status, event_at) {
     throw new Error("Database error: Could not save post");
   }
 }
+
 
 // post's functions
 export async function createPost(user_id, channel_id, title, content) {
