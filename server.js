@@ -17,12 +17,17 @@ import {
 	getPrintmakingPost,
 	getFilmPost,
 	addReport,
-	addReportComment,
+  addReportComment,
 	updateComment,
 	likePost, likeComment, getPostLikes, getCommentLikes,
   	getBannedUserEmails,
   	removeUserFromBanList,
-  	banUser
+  	banUser,
+	getEvents,
+	getOngoingUpcomingEvents,
+	createEvent,
+  getUnbannedUsers,
+  getAllReports
 } from "./database.js";
 
 const app = express();
@@ -40,10 +45,30 @@ app.get("/banned_users", async (req, res) => {
   res.send(user);
 });
 
+app.get("/unbanned_users", async (req, res) => {
+  const user = await getUnbannedUsers();
+  res.send(user);
+});
+
 app.get("/users", async (req, res) => {
 	const user = await getUsers();
 	res.send(user);
-})
+});
+
+app.get("/all-reports", async (req, res) => {
+  const reports = await getAllReports()
+  res.send(reports);
+});
+
+app.get("/events", async (req, res) => {
+  const event = await getEvents();
+  res.send(event);
+});
+
+app.get("/ongoing_upcoming_events", async (req, res) => {
+  const event = await getOngoingUpcomingEvents();
+  res.send(event);
+});
 
 app.get("/password/:email", async (req, res) => {
 	const email = req.params.email;
@@ -179,6 +204,51 @@ app.post("/ban-user", async (req, res) => {
       .json({ message: "Failed to ban user", error: error.message });
   }
 });
+
+app.post("/create-event", async (req, res) => {
+  const { name, description, event_at, event_end_at } = req.body; // Expecting the name, description, event_at, and event_end_at in the request body
+	console.log(event_at);
+	console.log(event_end_at);
+  if (!name || !event_at || !event_end_at) {
+    return res
+      .status(400)
+      .json({
+        message: "Name, event start time, and event end time are required",
+      });
+  }
+
+  try {
+    // Convert event times to Date objects
+    const eventDate = new Date(event_at);
+    const eventEndDate = new Date(event_end_at);
+    const currentDate = new Date();
+
+    let status;
+
+    // Determine the event status based on the current date and time
+    if (currentDate < eventDate) {
+      // Event is before the start date
+      status = "upcoming";
+    } else if (currentDate >= eventDate && currentDate <= eventEndDate) {
+      // Event is between the start and end date (ongoing)
+      status = "ongoing";
+    } else {
+      // Event is after the end date (completed)
+      status = "completed";
+    }
+
+    // Call the function to create the event in the database
+    const event = await createEvent(name, description, status, event_at, event_end_at);
+
+    res.status(201).json({ message: "Event created successfully", event });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Failed to create event", error: error.message });
+  }
+});
+
 
 // post's http
 app.get("/posts", async (req, res) => {
