@@ -17,9 +17,12 @@ import {
 	getPrintmakingPost,
 	getFilmPost,
 	addReport,
-  getBannedUserEmails,
-  removeUserFromBanList,
-  banUser
+	addReportComment,
+	updateComment,
+	likePost, likeComment, getPostLikes, getCommentLikes,
+  	getBannedUserEmails,
+  	removeUserFromBanList,
+  	banUser
 } from "./database.js";
 
 const app = express();
@@ -48,6 +51,54 @@ app.get("/password/:email", async (req, res) => {
 	res.send(password);
 });
 
+// like a post
+app.post('/api/likePost', async (req, res) => {
+	const { post_id, user_id } = req.body;
+	try {
+	  const like_count = await likePost(post_id, user_id);
+	  res.json({ like_count });
+	} catch (error) {
+	  console.error('Error liking post:', error);
+	  res.status(500).json({ error: 'Failed to like post' });
+	}
+});
+  
+// like a comment
+app.post('/api/likeComment', async (req, res) => {
+	const { comment_id, user_id } = req.body;
+	try {
+	  const like_count = await likeComment(comment_id, user_id);
+	  res.json({ like_count });
+	} catch (error) {
+	  console.error('Error liking comment:', error);
+	  res.status(500).json({ error: 'Failed to like comment' });
+	}
+});
+  
+//get users who liked a post
+app.get('/api/postLikes/:post_id', async (req, res) => {
+	const { post_id } = req.params;
+	try {
+	  const likes = await getPostLikes(post_id);
+	  res.json(likes);
+	} catch (error) {
+	  console.error('Error fetching post likes:', error);
+	  res.status(500).json({ error: 'Failed to fetch post likes' });
+	}
+});
+  
+// get users who liked a comment
+app.get('/api/commentLikes/:comment_id', async (req, res) => {
+	const { comment_id } = req.params;
+	try {
+	  const likes = await getCommentLikes(comment_id);
+	  res.json(likes);
+	} catch (error) {
+	  console.error('Error fetching comment likes:', error);
+	  res.status(500).json({ error: 'Failed to fetch comment likes' });
+	}
+});
+
 //filter channel
 app.get("/ceramic", async (req, res) => {
 	const ceramicPosts = await getCeramicPost();
@@ -64,12 +115,25 @@ app.get("/film", async (req, res) => {
 	res.send(filmPosts);
 });
 
-//add report
+//add report(post)
 app.post('/reports', async (req, res) => {
 	const { post_id, reported_by, reason } = req.body;
   
 	try {
 	  await addReport(post_id, reported_by, reason); 
+	  res.status(201).json({ message: 'Report submitted successfully' });
+	} catch (error) {
+	  console.error('Error submitting report:', error);
+	  res.status(500).json({ message: 'Failed to submit report', error: error.message });
+	}
+});
+
+//add report(comment)
+app.post('/reportComment', async (req, res) => {
+	const { comment_id, reported_by, reason } = req.body;
+  
+	try {
+	  await addReportComment(comment_id, reported_by, reason); 
 	  res.status(201).json({ message: 'Report submitted successfully' });
 	} catch (error) {
 	  console.error('Error submitting report:', error);
@@ -133,8 +197,7 @@ app.put('/posts/:id', async (req, res) => {
     const postId = req.params.id;
     const { title, content } = req.body;
 
-    try {
-        // Use the helper function to update the post
+    try {s
         await updatePost(postId, title, content);
         res.status(200).json({ message: 'Post updated successfully' });
     } catch (err) {
@@ -147,7 +210,6 @@ app.delete('/posts/:id', async (req, res) => {
     const postId = req.params.id;
 
     try {
-        // Use the helper function to delete the post
         await deletePost(postId);
         res.status(200).json({ message: 'Post deleted successfully' });
     } catch (err) {
@@ -195,6 +257,19 @@ app.post("/announcement", async (req, res) => {
 		console.error("Error creating announcement:", error);
 		res.status(500).send({ error: "Error creating announcement" }); // Send an error response
 	}
+});
+
+//update comment
+app.put('/comment/:id', async (req, res) => {
+    const commentId = req.params.id;
+    const { content } = req.body;
+
+    try {
+        await updateComment(commentId, content);
+        res.status(200).json({ message: 'Comment updated successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Error updating comment', error: err.message });
+    }
 });
 
 app.listen(8080, () => {
