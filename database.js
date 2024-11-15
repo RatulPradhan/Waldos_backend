@@ -1,6 +1,7 @@
 import mysql from "mysql2";
 import dotenv from "dotenv";
 import e from "express";
+import { format } from "date-fns";
 
 dotenv.config();
 
@@ -18,9 +19,31 @@ export async function getUsers() {
 	return rows;
 }
 
+export async function getUnbannedUsers() {
+  const [rows] = await db.query(`
+    SELECT * 
+    FROM user
+    WHERE email NOT IN (SELECT email FROM banned_users);
+  `);
+  return rows;
+}
+
+
 export async function getBannedUserEmails() {
 	const [rows] = await db.query("SELECT email FROM banned_users;");
 	return rows;
+}
+
+export async function getAllReports() {
+  const [report] = await db.query("SELECT * FROM reports;");
+  const [c_report] = await db.query("SELECT * FROM reportComment;");
+
+  // Combine the dictionaries by their index positions
+  const combinedReports = report.map((item, index) => {
+    return { ...item, ...(c_report[index] || {}) };
+  });
+
+  return combinedReports;
 }
 
 export async function removeUserFromBanList(email) {
@@ -88,31 +111,45 @@ export async function getEvents() {
 	return rows;
 }
 
-export async function createEvent(name, description, status, event_at) {
-	const query = `INSERT INTO post (name, description, status, event_at) VALUES (?, ?, ?, ?)`;
-
-	try {
-		const [result] = await db.execute(query, [
-			name,
-			description,
-			status,
-			event_at,
-		]);
-		const id = result.insertId;
-		return getPost(id);
-	} catch (error) {
-		console.error("Error saving post:", error);
-		throw new Error("Database error: Could not save post");
-	}
+export async function getOngoingUpcomingEvents() {
+  const [rows] = await db.query("SELECT * FROM event WHERE status = 'ongoing' OR status = 'upcoming';");
+  return rows;
 }
+
+// Helper function to format the datetime for MySQL
+function formatDateForMySQL(date) {
+  return format(new Date(date), 'yyyy-MM-dd HH:mm:ss');
+}
+
+// In your `createEvent` function or wherever you call it
+export async function createEvent(name, description, status, event_at, event_end_at) {
+  // Format the event_at datetime for MySQL
+  console.log(event_at)
+  console.log(event_end_at);
+  const formattedEventAt = formatDateForMySQL(event_at);
+  const formattedEventEndAt = formatDateForMySQL(event_end_at);
+
+  const query = `INSERT INTO event (name, description, status, event_at, event_end_at) VALUES (?, ?, ?, ?, ?)`;
+
+  try {
+    const [result] = await db.execute(query, [
+      name,
+      description,
+      status,
+      formattedEventAt, // Use the formatted datetime
+	  formattedEventEndAt
+    ]);
+    const id = result.insertId;
+    return getPost(id);
+  } catch (error) {
+    console.error("Error saving post:", error);
+    throw new Error("Database error: Could not save post");
+  }
+}
+
 
 // post's functions
 export async function createPost(user_id, channel_id, title, content) {
-	// testing code
-	// console.log("user_id:", user_id);
-	// console.log("channel_id:", channel_id);
-	// console.log("title:", title);
-	// console.log("content:", content);
 	const query = `INSERT INTO post (user_id, channel_id, title, content) VALUES (?, ?, ?, ?)`;
 
 	try {
@@ -131,12 +168,10 @@ export async function createPost(user_id, channel_id, title, content) {
 }
 
 export async function getPost(id) {
-	const [rows] = await db.query(
-		`
+	const [rows] = await db.query(`
       SELECT * 
       FROM post
-      WHERE post_id = ?
-  `,
+      WHERE post_id = ?`,
 		[id]
 	);
 
@@ -213,7 +248,12 @@ export async function getComment(id) {
 }
 
 export async function getPostWithComments(post_id) {
-	const postQuery = `SELECT * FROM post WHERE post_id = ?`;
+	const postQuery = ` 
+	SELECT post.*, user.username, 
+	(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
+	FROM post
+	JOIN user ON post.user_id = user.user_id
+	WHERE post.post_id = ?`;
 
 	const commentsQuery = `
 	SELECT comment.comment_id, comment.post_id, comment.user_id, comment.parent_id, comment.content, comment.created_at, user.username
@@ -242,11 +282,22 @@ export async function getPostWithComments(post_id) {
 			return acc;
 		}, {});
 
-		const topLevelComments = commentsByParentId[null] || [];
+		// Recursive function to nest replies
+		const nestReplies = (commentList) => {
+			return commentList.map(comment => ({
+				...comment,
+				replies: commentsByParentId[comment.comment_id] ? nestReplies(commentsByParentId[comment.comment_id]) : []
+			}));
+		};
 
-		topLevelComments.forEach((comment) => {
-			comment.replies = commentsByParentId[comment.comment_id] || [];
-		});
+		// Initialize top-level comments with nested replies
+		const topLevelComments = nestReplies(commentsByParentId[null] || []);
+
+		// const topLevelComments = commentsByParentId[null] || [];
+
+		// topLevelComments.forEach((comment) => {
+		// 	comment.replies = commentsByParentId[comment.comment_id] || [];
+		// });
 
 		// num of total comments
 		const totalComments = commentsResult.length;
@@ -258,37 +309,130 @@ export async function getPostWithComments(post_id) {
 	}
 }
 
+//update comment
+export async function updateComment(comment_id, content) {
+    const query = 'UPDATE comment SET content = ? WHERE comment_id = ?';
+    return db.execute(query, [content, comment_id]);
+}
+
 //function to filter channel
 export async function getCeramicPost() {
-	const query =
-		"SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username FROM post JOIN user ON post.user_id = user.user_id WHERE post.channel_id = 2 ORDER BY post.created_at DESC";
 
+	const query = 
+		`SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
+		FROM post
+		JOIN user ON post.user_id = user.user_id
+		WHERE post.channel_id = 2
+		ORDER BY post.created_at DESC`;
 	const [rows] = await db.execute(query);
 	return rows;
 }
 
 export async function getPrintmakingPost() {
-	const query =
-		"SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username FROM post JOIN user ON post.user_id = user.user_id WHERE post.channel_id = 3 ORDER BY post.created_at DESC";
+
+	const query = 
+		`SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
+		FROM post
+		JOIN user ON post.user_id = user.user_id
+		WHERE post.channel_id = 3
+		ORDER BY post.created_at DESC`;
 
 	const [rows] = await db.execute(query);
 	return rows;
 }
 
 export async function getFilmPost() {
-	const query =
-		"SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username FROM post JOIN user ON post.user_id = user.user_id WHERE post.channel_id = 4 ORDER BY post.created_at DESC";
+	const query = 
+		`SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
+		FROM post
+		JOIN user ON post.user_id = user.user_id
+		WHERE post.channel_id = 4
+		ORDER BY post.created_at DESC`;
 
 	const [rows] = await db.execute(query);
 	return rows;
 }
 
-// function to add report
+// function to add report(post)
 export async function addReport(postId, reportedBy, reason) {
 	const query =
 		"INSERT INTO reports (post_id, reported_by, reason, status) VALUES (?, ?, ?, ?)";
 	const params = [postId, reportedBy, reason, "pending"];
 	return db.execute(query, params);
+}
+
+// function to add report(comment)
+export async function addReportComment(commentId, reportedBy, reason) {
+	const query = 'INSERT INTO reportComment (comment_id, reported_by, reason, status) VALUES (?, ?, ?, ?)';
+	const params = [commentId, reportedBy, reason, 'pending'];
+	return db.execute(query, params);
+}
+
+// Function to add a like to a post
+export async function likePost(post_id, user_id) {
+	const [exists] = await db.query(
+	  'SELECT * FROM post_likes WHERE post_id = ? AND user_id = ?',
+	  [post_id, user_id]
+	);
+	if (exists.length === 0) {
+	  await db.query('INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)', [post_id, user_id]);
+	}
+	const [result] = await db.query('SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = ?', [post_id]);
+	return result[0].like_count;
+}
+  
+// Function to add a like to a comment
+export async function likeComment(comment_id, user_id) {
+	const [exists] = await db.query(
+	  'SELECT * FROM comment_likes WHERE comment_id = ? AND user_id = ?',
+	  [comment_id, user_id]
+	);
+	if (exists.length === 0) {
+	  await db.query('INSERT INTO comment_likes (comment_id, user_id) VALUES (?, ?)', [comment_id, user_id]);
+	}
+	const [result] = await db.query('SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = ?', [comment_id]);
+	return result[0].like_count;
+}
+  
+// Function to get users who liked a post
+export async function getPostLikes(post_id) {
+	const likeCountQuery = 'SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = ?';
+    const likedUsersQuery = `
+      SELECT user.user_id, user.username
+      FROM post_likes
+      JOIN user ON post_likes.user_id = user.user_id
+      WHERE post_likes.post_id = ?
+    `;
+
+    const [likeCountResult] = await db.execute(likeCountQuery, [post_id]);
+    const [likedUsersResult] = await db.execute(likedUsersQuery, [post_id]);
+
+    return {
+		like_count: likeCountResult[0].like_count,
+        liked_by_users: likedUsersResult,
+    };
+}
+  
+// Function to get users who liked a comment
+export async function getCommentLikes(comment_id) {
+	const likeCountQuery = 'SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = ?';
+    const likedUsersQuery = `
+      SELECT user.user_id, user.username
+      FROM comment_likes
+      JOIN user ON comment_likes.user_id = user.user_id
+      WHERE comment_likes.comment_id = ?
+    `;
+
+    const [likeCountResult] = await db.execute(likeCountQuery, [comment_id]);
+    const [likedUsersResult] = await db.execute(likedUsersQuery, [comment_id]);
+
+    return {
+		like_count: likeCountResult[0].like_count,
+        liked_by_users: likedUsersResult,
+    };
 }
 
 // Function to test getUsers
