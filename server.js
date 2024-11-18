@@ -197,7 +197,7 @@ app.put('/posts/:id', async (req, res) => {
     const postId = req.params.id;
     const { title, content } = req.body;
 
-    try {s
+    try {
         await updatePost(postId, title, content);
         res.status(200).json({ message: 'Post updated successfully' });
     } catch (err) {
