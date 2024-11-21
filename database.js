@@ -220,14 +220,14 @@ export async function getUserByEmail(email) {
 // 	// };
 // }
 
-export async function createUser(username, email, password, type) {
+export async function createUser(username, email, password, type, Bio, profile_picture) {
 	const result = await db.query(
 		`
     
-    INSERT INTO user (username, email, password, user_type)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO user (username, email, password, user_type, Bio, profile_picture)
+    VALUES (?, ?, ?, ?, ?, ?)
     `,
-		[username, email, password, type]
+		[username, email, password, type, Bio, profile_picture]
 	);
 	const id = result.user_id;
 	return getUser(id);
@@ -253,7 +253,7 @@ function formatDateForMySQL(date) {
 // In your `createEvent` function or wherever you call it
 export async function createEvent(
 	name,
-	description,
+	url,
 	status,
 	event_at,
 	event_end_at
@@ -264,12 +264,12 @@ export async function createEvent(
 	const formattedEventAt = formatDateForMySQL(event_at);
 	const formattedEventEndAt = formatDateForMySQL(event_end_at);
 
-	const query = `INSERT INTO event (name, description, status, event_at, event_end_at) VALUES (?, ?, ?, ?, ?)`;
+	const query = `INSERT INTO event (name, url, status, event_at, event_end_at) VALUES (?, ?, ?, ?, ?)`;
 
 	try {
 		const [result] = await db.execute(query, [
 			name,
-			description,
+			url,
 			status,
 			formattedEventAt, // Use the formatted datetime
 			formattedEventEndAt,
@@ -591,6 +591,59 @@ async function testGetUsers() {
 		console.error("Error fetching users:", error);
 	}
 }
+
+export async function followChannel(user_id, channel_id) {
+  const result = await db.query(
+    `
+		INSERT INTO following (user_id, channel_id)
+		VALUES (?, ?)
+		`,
+    [user_id, channel_id]
+  );
+
+  // Return confirmation or the inserted row
+  return {
+    message: "User followed the channel successfully",
+    user_id,
+    channel_id,
+  };
+}
+
+export async function unfollowChannel(user_id, channel_id) {
+  const result = await db.query(
+    `
+    DELETE FROM following
+    WHERE user_id = ? AND channel_id = ?
+    `,
+    [user_id, channel_id]
+  );
+
+  // Return the number of affected rows or a message for confirmation
+  return result.affectedRows > 0
+    ? { message: "User successfully unfollowed the channel" }
+    : { message: "No matching record found" };
+}
+
+export async function isFollowing(user_id, channel_id) {
+  try {
+    const result = await db.query(
+      `
+      SELECT 1 
+      FROM following
+      WHERE user_id = ? AND channel_id = ?
+      LIMIT 1
+      `,
+      [user_id, channel_id]
+    );
+
+    // If the result has any rows, return true, otherwise false
+    return result[0].length > 0;
+  } catch (error) {
+    console.error("Error checking if user is following the channel:", error);
+    throw error; // Propagate the error for upstream handling
+  }
+}
+
 
 //function to insert data into a database
 //takes in a list of values and a query string

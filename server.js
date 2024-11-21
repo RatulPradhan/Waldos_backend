@@ -40,6 +40,10 @@ import {
 	updateUsername,
 	getAllReports,
 	getUserProfileById
+  createUser,
+  followChannel,
+  unfollowChannel,
+  isFollowing
 } from "./database.js";
 
 const app = express();
@@ -221,6 +225,43 @@ app.delete("/unban-user", async (req, res) => {
 	}
 });
 
+// Route to unfollow a channel
+app.delete("/unfollow-channel", async (req, res) => {
+  const { user_id, channel_id } = req.body; // Ensure user_id and channel_id are sent in the body
+
+  try {
+    // Call the function to remove the user-channel pair from the following table
+    const result = await unfollowChannel(user_id, channel_id);
+
+    // Check if the record was successfully deleted
+    if (result.affectedRows > 0) {
+      res.status(200).send({ message: "User successfully unfollowed the channel" });
+    } else {
+      res.status(404).send({ message: "No matching record found" });
+    }
+  } catch (error) {
+    console.error("Error unfollowing the channel:", error);
+    res.status(500).send({ message: "Internal server error" });
+  }
+});
+
+
+
+// Route to check if a user is following a specific channel
+app.get('/is-following', async (req, res) => {
+  const { user_id, channel_id } = req.query; // Expecting query parameters
+
+  try {
+    const following = await isFollowing(user_id, channel_id);
+
+    res.status(200).json({ isFollowing: following });
+  } catch (error) {
+    console.error('Error checking if user is following the channel:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
 app.post("/ban-user", async (req, res) => {
 	const { email } = req.body; // Expecting the email to be sent in the request body
 
@@ -240,7 +281,7 @@ app.post("/ban-user", async (req, res) => {
 });
 
 app.post("/create-event", async (req, res) => {
-	const { name, description, event_at, event_end_at } = req.body; // Expecting the name, description, event_at, and event_end_at in the request body
+	const { name, url, event_at, event_end_at } = req.body; // Expecting the name, description, event_at, and event_end_at in the request body
 	console.log(event_at);
 	console.log(event_end_at);
 	if (!name || !event_at || !event_end_at) {
@@ -272,7 +313,7 @@ app.post("/create-event", async (req, res) => {
 		// Call the function to create the event in the database
 		const event = await createEvent(
 			name,
-			description,
+			url,
 			status,
 			event_at,
 			event_end_at
@@ -299,17 +340,32 @@ app.post("/posts", async (req, res) => {
 	res.status(201).send(post);
 });
 
+app.post("/create-user", async (req, res) => {
+  const {username, email, password, type, Bio, profile_picture} = req.body;
+  const user = await createUser(username, email, password, type, Bio, profile_picture);
+  res.status(201).send(user);
+})
+
+app.post("/follow-channel", async (req, res) => {
+  const {user_id, channel_id} = req.body;
+  const follow = await followChannel(user_id, channel_id);
+  res.status(201).send(follow);
+})
+
 // update post
 app.put("/posts/:id", async (req, res) => {
 	const postId = req.params.id;
 	const { title, content } = req.body;
 
-    try {
-        await updatePost(postId, title, content);
-        res.status(200).json({ message: 'Post updated successfully' });
-    } catch (err) {
-        res.status(500).json({ message: 'Error updating post', error: err.message });
-    }
+
+	try {
+		await updatePost(postId, title, content);
+		res.status(200).json({ message: "Post updated successfully" });
+	} catch (err) {
+		res
+			.status(500)
+			.json({ message: "Error updating post", error: err.message });
+	}
 });
 
 //delete post
