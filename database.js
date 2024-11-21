@@ -56,10 +56,108 @@ export async function removeUserFromBanList(email) {
 	}
 }
 
+//logged in user
 export async function getUserByID(id) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE user_id = ?`, [id]);
 	return rows;
 }
+
+// fetch other user
+// export async function getUserProfileById(user_id) {
+// 	const query = `
+// 	  SELECT u.username, 
+// 	  		 u.user_id,
+// 			 u.profile_picture, 
+// 			 u.Bio, 
+// 			 u.created_at, 
+// 			 u.user_type,
+// 			 p.post_id, 
+// 			 p.title, 
+// 			 p.content, 
+// 			 p.created_at AS post_created_at
+// 	  FROM user u
+// 	  LEFT JOIN post p ON u.user_id = p.user_id
+// 	  WHERE u.user_id = ?
+// 	`;
+  
+// 	const [rows] = await db.query(query, [user_id]);
+  
+// 	if (!rows.length) {
+// 	  return null; // No user found
+// 	}
+  
+// 	// Format the user profile and posts
+// 	return {
+// 	  username: rows[0].username,
+// 	  userRole: rows[0].user_type,
+// 	  user_id: rows[0].user_id,
+// 	  profile_picture: rows[0].profile_picture,
+// 	  bio: rows[0].Bio,
+// 	  created_at: rows[0].created_at,
+// 	  posts: rows
+// 		.filter((row) => row.post_id) // Filter rows with posts
+// 		.map((post) => ({
+// 		  post_id: post.post_id,
+// 		  title: post.title,
+// 		  content: post.content,
+// 		  created_at: post.post_created_at,
+// 		})),
+// 	};
+// }
+
+export async function getUserProfileById(user_id) {
+	const query = `
+	  SELECT 
+	    u.username AS profile_username, 
+	    u.user_id,
+	    u.profile_picture, 
+	    u.Bio, 
+	    u.created_at, 
+	    u.user_type,
+	    p.post_id, 
+	    p.title, 
+	    p.content, 
+	    p.created_at AS post_created_at,
+	    post_user.username AS post_author_username,
+	    COUNT(c.comment_id) AS comment_count
+	  FROM user u
+	  LEFT JOIN post p ON u.user_id = p.user_id
+	  LEFT JOIN user post_user ON p.user_id = post_user.user_id
+	  LEFT JOIN comment c ON p.post_id = c.post_id
+	  WHERE u.user_id = ?
+	  GROUP BY p.post_id, u.user_id, post_user.username
+	`;
+
+	const [rows] = await db.query(query, [user_id]);
+
+	if (!rows.length) {
+		return null; // No user found
+	}
+
+	// Format the user profile and posts
+	return {
+		username: rows[0].profile_username, // User's profile username
+		userRole: rows[0].user_type,
+		user_id: rows[0].user_id,
+		profile_picture: rows[0].profile_picture,
+		bio: rows[0].Bio,
+		created_at: rows[0].created_at,
+		posts: rows
+			.filter((row) => row.post_id) // Filter rows with posts
+			.map((post) => ({
+				post_id: post.post_id,
+				title: post.title,
+				content: post.content,
+				created_at: post.post_created_at,
+				username: post.post_author_username, // Author username
+				comment_count: post.comment_count || 0, // Number of comments
+				profile_picture: rows[0].profile_picture
+			})),
+	};
+}
+
+  
+  
 
 export async function getUser(username) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE username = ?`, [
@@ -91,6 +189,36 @@ export async function getUserByEmail(email) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE email = ?`, [email]);
 	return rows;
 }
+// change in userData
+// export async function getUserByEmail(email) {
+// 	const query = `
+// 	  SELECT u.*, 
+// 			 p.post_id, p.title, p.content, p.created_at AS post_created_at
+// 	  FROM user u
+// 	  LEFT JOIN post p ON u.user_id = p.user_id
+// 	  WHERE u.email = ?
+// 	`;
+  
+// 	const [rows] = await db.query(query, [email]);
+
+// 	return rows;
+  
+// 	// if (!rows.length) {
+// 	//   return null; // Return null if no user is found
+// 	// }
+  
+// 	// const user = {
+// 	//   ...rows[0], // Spread user details
+// 	//   posts: rows
+// 	// 	.filter((row) => row.post_id) // Filter rows with posts
+// 	// 	.map((post) => ({
+// 	// 	  post_id: post.post_id,
+// 	// 	  title: post.title,
+// 	// 	  content: post.content,
+// 	// 	  created_at: post.post_created_at,
+// 	// 	})),
+// 	// };
+// }
 
 export async function createUser(username, email, password, type, Bio, profile_picture) {
 	const result = await db.query(

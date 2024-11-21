@@ -39,6 +39,7 @@ import {
 	updateBio,
 	updateUsername,
 	getAllReports,
+	getUserProfileById
   createUser,
   followChannel,
   unfollowChannel,
@@ -48,6 +49,24 @@ import {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Fetch user profile by user_id
+app.get("/user/id/:user_id", async (req, res) => {
+	const { user_id } = req.params;
+  
+	try {
+	  const user = await getUserProfileById(user_id);
+  
+	  if (!user) {
+		return res.status(404).json({ error: "User not found" });
+	  }
+  
+	  res.json(user); // Send the user profile and posts
+	} catch (error) {
+	  console.error("Error fetching user profile:", error);
+	  res.status(500).json({ error: "Failed to fetch user profile" });
+	}
+});
 
 app.get("/user/:email", async (req, res) => {
 	const email = req.params.email;
@@ -337,6 +356,7 @@ app.post("/follow-channel", async (req, res) => {
 app.put("/posts/:id", async (req, res) => {
 	const postId = req.params.id;
 	const { title, content } = req.body;
+
 
 	try {
 		await updatePost(postId, title, content);
