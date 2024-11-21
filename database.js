@@ -1,5 +1,7 @@
 import mysql from "mysql2";
 import dotenv from "dotenv";
+import e from "express";
+import { format } from "date-fns";
 
 dotenv.config();
 
@@ -17,27 +19,145 @@ export async function getUsers() {
 	return rows;
 }
 
+export async function getUnbannedUsers() {
+	const [rows] = await db.query(`
+    SELECT * 
+    FROM user
+    WHERE email NOT IN (SELECT email FROM banned_users);
+  `);
+	return rows;
+}
+
 export async function getBannedUserEmails() {
 	const [rows] = await db.query("SELECT email FROM banned_users;");
 	return rows;
 }
 
-export async function removeUserFromBanList(email) {
-  const query = `DELETE FROM banned_users WHERE email = ?`;
-  try {
-    const result = await db.execute(query, [email]);
-    return result;
-  } catch (error) {
-    console.error("Error removing user from ban list:", error);
-    throw new Error("Database error: Could not remove user from ban list");
-  }
+export async function getAllReports() {
+	const [report] = await db.query("SELECT * FROM reports;");
+	const [c_report] = await db.query("SELECT * FROM reportComment;");
+
+	// Combine the dictionaries by their index positions
+	const combinedReports = report.map((item, index) => {
+		return { ...item, ...(c_report[index] || {}) };
+	});
+
+	return combinedReports;
 }
 
+export async function removeUserFromBanList(email) {
+	const query = `DELETE FROM banned_users WHERE email = ?`;
+	try {
+		const result = await db.execute(query, [email]);
+		return result;
+	} catch (error) {
+		console.error("Error removing user from ban list:", error);
+		throw new Error("Database error: Could not remove user from ban list");
+	}
+}
 
+//logged in user
 export async function getUserByID(id) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE user_id = ?`, [id]);
 	return rows;
 }
+
+// fetch other user
+// export async function getUserProfileById(user_id) {
+// 	const query = `
+// 	  SELECT u.username, 
+// 	  		 u.user_id,
+// 			 u.profile_picture, 
+// 			 u.Bio, 
+// 			 u.created_at, 
+// 			 u.user_type,
+// 			 p.post_id, 
+// 			 p.title, 
+// 			 p.content, 
+// 			 p.created_at AS post_created_at
+// 	  FROM user u
+// 	  LEFT JOIN post p ON u.user_id = p.user_id
+// 	  WHERE u.user_id = ?
+// 	`;
+  
+// 	const [rows] = await db.query(query, [user_id]);
+  
+// 	if (!rows.length) {
+// 	  return null; // No user found
+// 	}
+  
+// 	// Format the user profile and posts
+// 	return {
+// 	  username: rows[0].username,
+// 	  userRole: rows[0].user_type,
+// 	  user_id: rows[0].user_id,
+// 	  profile_picture: rows[0].profile_picture,
+// 	  bio: rows[0].Bio,
+// 	  created_at: rows[0].created_at,
+// 	  posts: rows
+// 		.filter((row) => row.post_id) // Filter rows with posts
+// 		.map((post) => ({
+// 		  post_id: post.post_id,
+// 		  title: post.title,
+// 		  content: post.content,
+// 		  created_at: post.post_created_at,
+// 		})),
+// 	};
+// }
+
+export async function getUserProfileById(user_id) {
+	const query = `
+	  SELECT 
+	    u.username AS profile_username, 
+	    u.user_id,
+	    u.profile_picture, 
+	    u.Bio, 
+	    u.created_at, 
+	    u.user_type,
+	    p.post_id, 
+	    p.title, 
+	    p.content, 
+	    p.created_at AS post_created_at,
+	    post_user.username AS post_author_username,
+	    COUNT(c.comment_id) AS comment_count
+	  FROM user u
+	  LEFT JOIN post p ON u.user_id = p.user_id
+	  LEFT JOIN user post_user ON p.user_id = post_user.user_id
+	  LEFT JOIN comment c ON p.post_id = c.post_id
+	  WHERE u.user_id = ?
+	  GROUP BY p.post_id, u.user_id, post_user.username
+	`;
+
+	const [rows] = await db.query(query, [user_id]);
+
+	if (!rows.length) {
+		return null; // No user found
+	}
+
+	// Format the user profile and posts
+	return {
+		username: rows[0].profile_username, // User's profile username
+		userRole: rows[0].user_type,
+		user_id: rows[0].user_id,
+		profile_picture: rows[0].profile_picture,
+		bio: rows[0].Bio,
+		created_at: rows[0].created_at,
+		posts: rows
+			.filter((row) => row.post_id) // Filter rows with posts
+			.map((post) => ({
+				post_id: post.post_id,
+				title: post.title,
+				content: post.content,
+				created_at: post.post_created_at,
+				username: post.post_author_username, // Author username
+				comment_count: post.comment_count || 0, // Number of comments
+				profile_picture: rows[0].profile_picture
+			})),
+	};
+}
+
+  
+  
 
 export async function getUser(username) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE username = ?`, [
@@ -47,17 +167,16 @@ export async function getUser(username) {
 }
 
 export async function banUser(email) {
-  const result = await db.query(
-    `
+	const result = await db.query(
+		`
     INSERT INTO banned_users (email)
     VALUES (?)
     `,
-    [email]
-  );
-  const rEmail = result.email;
-  return getUser(rEmail);
+		[email]
+	);
+	const rEmail = result.email;
+	return getUser(rEmail);
 }
-
 
 export async function getPasswordByEmail(email) {
 	const [rows] = await db.query(`SELECT password FROM user where email = ?`, [
@@ -70,6 +189,36 @@ export async function getUserByEmail(email) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE email = ?`, [email]);
 	return rows;
 }
+// change in userData
+// export async function getUserByEmail(email) {
+// 	const query = `
+// 	  SELECT u.*, 
+// 			 p.post_id, p.title, p.content, p.created_at AS post_created_at
+// 	  FROM user u
+// 	  LEFT JOIN post p ON u.user_id = p.user_id
+// 	  WHERE u.email = ?
+// 	`;
+  
+// 	const [rows] = await db.query(query, [email]);
+
+// 	return rows;
+  
+// 	// if (!rows.length) {
+// 	//   return null; // Return null if no user is found
+// 	// }
+  
+// 	// const user = {
+// 	//   ...rows[0], // Spread user details
+// 	//   posts: rows
+// 	// 	.filter((row) => row.post_id) // Filter rows with posts
+// 	// 	.map((post) => ({
+// 	// 	  post_id: post.post_id,
+// 	// 	  title: post.title,
+// 	// 	  content: post.content,
+// 	// 	  created_at: post.post_created_at,
+// 	// 	})),
+// 	// };
+// }
 
 export async function createUser(username, email, password, type) {
 	const result = await db.query(
@@ -85,26 +234,52 @@ export async function createUser(username, email, password, type) {
 }
 
 export async function getEvents() {
-  const [rows] = await db.query("SELECT * FROM event;");
-  return rows;
+	const [rows] = await db.query("SELECT * FROM event;");
+	return rows;
 }
 
-export async function createEvent(name, description, status, event_at) {
-  const query = `INSERT INTO post (name, description, status, event_at) VALUES (?, ?, ?, ?)`;
+export async function getOngoingUpcomingEvents() {
+	const [rows] = await db.query(
+		"SELECT * FROM event WHERE status = 'ongoing' OR status = 'upcoming';"
+	);
+	return rows;
+}
 
-  try {
-    const [result] = await db.execute(query, [
-      name,
-      description,
-      status,
-      event_at,
-    ]);
-    const id = result.insertId;
-    return getPost(id);
-  } catch (error) {
-    console.error("Error saving post:", error);
-    throw new Error("Database error: Could not save post");
-  }
+// Helper function to format the datetime for MySQL
+function formatDateForMySQL(date) {
+	return format(new Date(date), "yyyy-MM-dd HH:mm:ss");
+}
+
+// In your `createEvent` function or wherever you call it
+export async function createEvent(
+	name,
+	description,
+	status,
+	event_at,
+	event_end_at
+) {
+	// Format the event_at datetime for MySQL
+	console.log(event_at);
+	console.log(event_end_at);
+	const formattedEventAt = formatDateForMySQL(event_at);
+	const formattedEventEndAt = formatDateForMySQL(event_end_at);
+
+	const query = `INSERT INTO event (name, description, status, event_at, event_end_at) VALUES (?, ?, ?, ?, ?)`;
+
+	try {
+		const [result] = await db.execute(query, [
+			name,
+			description,
+			status,
+			formattedEventAt, // Use the formatted datetime
+			formattedEventEndAt,
+		]);
+		const id = result.insertId;
+		return getPost(id);
+	} catch (error) {
+		console.error("Error saving post:", error);
+		throw new Error("Database error: Could not save post");
+	}
 }
 
 // post's functions
@@ -127,7 +302,8 @@ export async function createPost(user_id, channel_id, title, content) {
 }
 
 export async function getPost(id) {
-	const [rows] = await db.query(`
+	const [rows] = await db.query(
+		`
       SELECT * 
       FROM post
       WHERE post_id = ?`,
@@ -137,14 +313,15 @@ export async function getPost(id) {
 	return rows[0];
 }
 
-export async function getPostsByChannel(channel_id){
-	const [rows] = await db.query(`SELECT * FROM post WHERE channel_id = ?`, [channel_id]
-	);
-	return rows[0]
+export async function getPostsByChannel(channel_id) {
+	const [rows] = await db.query(`SELECT * FROM post WHERE channel_id = ?`, [
+		channel_id,
+	]);
+	return rows[0];
 }
 
 export async function getAllPosts() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username, user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -168,10 +345,9 @@ export async function deletePost(post_id) {
 
 //update post
 export async function updatePost(post_id, title, content) {
-    const query = 'UPDATE post SET title = ?, content = ? WHERE post_id = ?';
-    return db.execute(query, [title, content, post_id]);
+	const query = "UPDATE post SET title = ?, content = ? WHERE post_id = ?";
+	return db.execute(query, [title, content, post_id]);
 }
-
 
 // comment's function
 
@@ -243,9 +419,11 @@ export async function getPostWithComments(post_id) {
 
 		// Recursive function to nest replies
 		const nestReplies = (commentList) => {
-			return commentList.map(comment => ({
+			return commentList.map((comment) => ({
 				...comment,
-				replies: commentsByParentId[comment.comment_id] ? nestReplies(commentsByParentId[comment.comment_id]) : []
+				replies: commentsByParentId[comment.comment_id]
+					? nestReplies(commentsByParentId[comment.comment_id])
+					: [],
 			}));
 		};
 
@@ -270,14 +448,13 @@ export async function getPostWithComments(post_id) {
 
 //update comment
 export async function updateComment(comment_id, content) {
-    const query = 'UPDATE comment SET content = ? WHERE comment_id = ?';
-    return db.execute(query, [content, comment_id]);
+	const query = "UPDATE comment SET content = ? WHERE comment_id = ?";
+	return db.execute(query, [content, comment_id]);
 }
 
 //function to filter channel
 export async function getCeramicPost() {
-	const query = 
-		`SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -288,8 +465,7 @@ export async function getCeramicPost() {
 }
 
 export async function getPrintmakingPost() {
-	const query = 
-		`SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -301,8 +477,7 @@ export async function getPrintmakingPost() {
 }
 
 export async function getFilmPost() {
-	const query = 
-		`SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -315,80 +490,96 @@ export async function getFilmPost() {
 
 // function to add report(post)
 export async function addReport(postId, reportedBy, reason) {
-	const query = 'INSERT INTO reports (post_id, reported_by, reason, status) VALUES (?, ?, ?, ?)';
-	const params = [postId, reportedBy, reason, 'pending'];
+	const query =
+		"INSERT INTO reports (post_id, reported_by, reason, status) VALUES (?, ?, ?, ?)";
+	const params = [postId, reportedBy, reason, "pending"];
 	return db.execute(query, params);
 }
 
 // function to add report(comment)
 export async function addReportComment(commentId, reportedBy, reason) {
-	const query = 'INSERT INTO reportComment (comment_id, reported_by, reason, status) VALUES (?, ?, ?, ?)';
-	const params = [commentId, reportedBy, reason, 'pending'];
+	const query =
+		"INSERT INTO reportComment (comment_id, reported_by, reason, status) VALUES (?, ?, ?, ?)";
+	const params = [commentId, reportedBy, reason, "pending"];
 	return db.execute(query, params);
 }
 
 // Function to add a like to a post
 export async function likePost(post_id, user_id) {
 	const [exists] = await db.query(
-	  'SELECT * FROM post_likes WHERE post_id = ? AND user_id = ?',
-	  [post_id, user_id]
+		"SELECT * FROM post_likes WHERE post_id = ? AND user_id = ?",
+		[post_id, user_id]
 	);
 	if (exists.length === 0) {
-	  await db.query('INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)', [post_id, user_id]);
+		await db.query("INSERT INTO post_likes (post_id, user_id) VALUES (?, ?)", [
+			post_id,
+			user_id,
+		]);
 	}
-	const [result] = await db.query('SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = ?', [post_id]);
+	const [result] = await db.query(
+		"SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = ?",
+		[post_id]
+	);
 	return result[0].like_count;
 }
-  
+
 // Function to add a like to a comment
 export async function likeComment(comment_id, user_id) {
 	const [exists] = await db.query(
-	  'SELECT * FROM comment_likes WHERE comment_id = ? AND user_id = ?',
-	  [comment_id, user_id]
+		"SELECT * FROM comment_likes WHERE comment_id = ? AND user_id = ?",
+		[comment_id, user_id]
 	);
 	if (exists.length === 0) {
-	  await db.query('INSERT INTO comment_likes (comment_id, user_id) VALUES (?, ?)', [comment_id, user_id]);
+		await db.query(
+			"INSERT INTO comment_likes (comment_id, user_id) VALUES (?, ?)",
+			[comment_id, user_id]
+		);
 	}
-	const [result] = await db.query('SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = ?', [comment_id]);
+	const [result] = await db.query(
+		"SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = ?",
+		[comment_id]
+	);
 	return result[0].like_count;
 }
-  
+
 // Function to get users who liked a post
 export async function getPostLikes(post_id) {
-	const likeCountQuery = 'SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = ?';
-    const likedUsersQuery = `
+	const likeCountQuery =
+		"SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = ?";
+	const likedUsersQuery = `
       SELECT user.user_id, user.username
       FROM post_likes
       JOIN user ON post_likes.user_id = user.user_id
       WHERE post_likes.post_id = ?
     `;
 
-    const [likeCountResult] = await db.execute(likeCountQuery, [post_id]);
-    const [likedUsersResult] = await db.execute(likedUsersQuery, [post_id]);
+	const [likeCountResult] = await db.execute(likeCountQuery, [post_id]);
+	const [likedUsersResult] = await db.execute(likedUsersQuery, [post_id]);
 
-    return {
+	return {
 		like_count: likeCountResult[0].like_count,
-        liked_by_users: likedUsersResult,
-    };
+		liked_by_users: likedUsersResult,
+	};
 }
-  
+
 // Function to get users who liked a comment
 export async function getCommentLikes(comment_id) {
-	const likeCountQuery = 'SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = ?';
-    const likedUsersQuery = `
+	const likeCountQuery =
+		"SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = ?";
+	const likedUsersQuery = `
       SELECT user.user_id, user.username
       FROM comment_likes
       JOIN user ON comment_likes.user_id = user.user_id
       WHERE comment_likes.comment_id = ?
     `;
 
-    const [likeCountResult] = await db.execute(likeCountQuery, [comment_id]);
-    const [likedUsersResult] = await db.execute(likedUsersQuery, [comment_id]);
+	const [likeCountResult] = await db.execute(likeCountQuery, [comment_id]);
+	const [likedUsersResult] = await db.execute(likedUsersQuery, [comment_id]);
 
-    return {
+	return {
 		like_count: likeCountResult[0].like_count,
-        liked_by_users: likedUsersResult,
-    };
+		liked_by_users: likedUsersResult,
+	};
 }
 
 // Function to test getUsers
@@ -410,5 +601,57 @@ export async function insertData(values, query) {
 		return result;
 	} catch (error) {
 		console.error("Error inserting data:", error);
+	}
+}
+
+export async function getUserBio(userId) {
+	const query = `SELECT bio FROM user WHERE user_id = ?`;
+	const [rows] = await db.execute(query, [userId]);
+	return rows[0];
+}
+
+export async function getUserCreated_at(userId) {
+	const query = `SELECT created_at FROM user WHERE user_id = ?`;
+	const [rows] = await db.execute(query, [userId]);
+	return rows[0];
+}
+
+export async function updateUserProfilePicture(userId, fileExtension) {
+	const query = `UPDATE user SET profile_picture = ? WHERE user_id = ?`;
+	try {
+		const [result] = await db.execute(query, [fileExtension, userId]);
+		return result;
+	} catch (error) {
+		console.error("Error updating user profile picture:", error);
+		throw new Error("Database error: Could not update user profile picture");
+	}
+}
+
+export async function updateBio(userId, bio) {
+	const query = `UPDATE user SET bio = ? WHERE user_id = ?`;
+	try {
+		const [result] = await db.execute(query, [bio, userId]);
+		return result;
+	} catch (error) {
+		console.error("Error updating user bio:", error);
+		throw new Error("Database error: Could not update user bio");
+	}
+}
+
+export async function updateUsername(userId, newUsername) {
+	const checkQuery = `SELECT COUNT(*) as count FROM user WHERE username = ?`;
+	const updateQuery = `UPDATE user SET username = ? WHERE user_id = ?`;
+
+	try {
+		const [checkResult] = await db.execute(checkQuery, [newUsername]);
+		if (checkResult[0].count > 0) {
+			throw new Error("Username is already taken");
+		}
+
+		const [updateResult] = await db.execute(updateQuery, [newUsername, userId]);
+		return updateResult;
+	} catch (error) {
+		console.error("Error updating username:", error);
+		throw new Error("Database error: Could not update username");
 	}
 }
