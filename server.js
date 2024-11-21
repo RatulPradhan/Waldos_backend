@@ -39,11 +39,11 @@ import {
 	updateBio,
 	updateUsername,
 	getAllReports,
-	getUserProfileById
-  createUser,
-  followChannel,
-  unfollowChannel,
-  isFollowing
+	getUserProfileById,
+	createUser,
+	followChannel,
+	unfollowChannel,
+	isFollowing,
 } from "./database.js";
 
 const app = express();
@@ -53,18 +53,18 @@ app.use(express.json());
 // Fetch user profile by user_id
 app.get("/user/id/:user_id", async (req, res) => {
 	const { user_id } = req.params;
-  
+
 	try {
-	  const user = await getUserProfileById(user_id);
-  
-	  if (!user) {
-		return res.status(404).json({ error: "User not found" });
-	  }
-  
-	  res.json(user); // Send the user profile and posts
+		const user = await getUserProfileById(user_id);
+
+		if (!user) {
+			return res.status(404).json({ error: "User not found" });
+		}
+
+		res.json(user); // Send the user profile and posts
 	} catch (error) {
-	  console.error("Error fetching user profile:", error);
-	  res.status(500).json({ error: "Failed to fetch user profile" });
+		console.error("Error fetching user profile:", error);
+		res.status(500).json({ error: "Failed to fetch user profile" });
 	}
 });
 
@@ -227,40 +227,39 @@ app.delete("/unban-user", async (req, res) => {
 
 // Route to unfollow a channel
 app.delete("/unfollow-channel", async (req, res) => {
-  const { user_id, channel_id } = req.body; // Ensure user_id and channel_id are sent in the body
+	const { user_id, channel_id } = req.body; // Ensure user_id and channel_id are sent in the body
 
-  try {
-    // Call the function to remove the user-channel pair from the following table
-    const result = await unfollowChannel(user_id, channel_id);
+	try {
+		// Call the function to remove the user-channel pair from the following table
+		const result = await unfollowChannel(user_id, channel_id);
 
-    // Check if the record was successfully deleted
-    if (result.affectedRows > 0) {
-      res.status(200).send({ message: "User successfully unfollowed the channel" });
-    } else {
-      res.status(404).send({ message: "No matching record found" });
-    }
-  } catch (error) {
-    console.error("Error unfollowing the channel:", error);
-    res.status(500).send({ message: "Internal server error" });
-  }
+		// Check if the record was successfully deleted
+		if (result.affectedRows > 0) {
+			res
+				.status(200)
+				.send({ message: "User successfully unfollowed the channel" });
+		} else {
+			res.status(404).send({ message: "No matching record found" });
+		}
+	} catch (error) {
+		console.error("Error unfollowing the channel:", error);
+		res.status(500).send({ message: "Internal server error" });
+	}
 });
-
-
 
 // Route to check if a user is following a specific channel
-app.get('/is-following', async (req, res) => {
-  const { user_id, channel_id } = req.query; // Expecting query parameters
+app.get("/is-following", async (req, res) => {
+	const { user_id, channel_id } = req.query; // Expecting query parameters
 
-  try {
-    const following = await isFollowing(user_id, channel_id);
+	try {
+		const following = await isFollowing(user_id, channel_id);
 
-    res.status(200).json({ isFollowing: following });
-  } catch (error) {
-    console.error('Error checking if user is following the channel:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
+		res.status(200).json({ isFollowing: following });
+	} catch (error) {
+		console.error("Error checking if user is following the channel:", error);
+		res.status(500).json({ message: "Internal server error" });
+	}
 });
-
 
 app.post("/ban-user", async (req, res) => {
 	const { email } = req.body; // Expecting the email to be sent in the request body
@@ -311,13 +310,7 @@ app.post("/create-event", async (req, res) => {
 		}
 
 		// Call the function to create the event in the database
-		const event = await createEvent(
-			name,
-			url,
-			status,
-			event_at,
-			event_end_at
-		);
+		const event = await createEvent(name, url, status, event_at, event_end_at);
 
 		res.status(201).json({ message: "Event created successfully", event });
 	} catch (error) {
@@ -341,22 +334,28 @@ app.post("/posts", async (req, res) => {
 });
 
 app.post("/create-user", async (req, res) => {
-  const {username, email, password, type, Bio, profile_picture} = req.body;
-  const user = await createUser(username, email, password, type, Bio, profile_picture);
-  res.status(201).send(user);
-})
+	const { username, email, password, type, Bio, profile_picture } = req.body;
+	const user = await createUser(
+		username,
+		email,
+		password,
+		type,
+		Bio,
+		profile_picture
+	);
+	res.status(201).send(user);
+});
 
 app.post("/follow-channel", async (req, res) => {
-  const {user_id, channel_id} = req.body;
-  const follow = await followChannel(user_id, channel_id);
-  res.status(201).send(follow);
-})
+	const { user_id, channel_id } = req.body;
+	const follow = await followChannel(user_id, channel_id);
+	res.status(201).send(follow);
+});
 
 // update post
 app.put("/posts/:id", async (req, res) => {
 	const postId = req.params.id;
 	const { title, content } = req.body;
-
 
 	try {
 		await updatePost(postId, title, content);
