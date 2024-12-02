@@ -56,9 +56,106 @@ export async function removeUserFromBanList(email) {
 	}
 }
 
+//logged in user
 export async function getUserByID(id) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE user_id = ?`, [id]);
 	return rows;
+}
+
+// fetch other user
+// export async function getUserProfileById(user_id) {
+// 	const query = `
+// 	  SELECT u.username,
+// 	  		 u.user_id,
+// 			 u.profile_picture,
+// 			 u.Bio,
+// 			 u.created_at,
+// 			 u.user_type,
+// 			 p.post_id,
+// 			 p.title,
+// 			 p.content,
+// 			 p.created_at AS post_created_at
+// 	  FROM user u
+// 	  LEFT JOIN post p ON u.user_id = p.user_id
+// 	  WHERE u.user_id = ?
+// 	`;
+
+// 	const [rows] = await db.query(query, [user_id]);
+
+// 	if (!rows.length) {
+// 	  return null; // No user found
+// 	}
+
+// 	// Format the user profile and posts
+// 	return {
+// 	  username: rows[0].username,
+// 	  userRole: rows[0].user_type,
+// 	  user_id: rows[0].user_id,
+// 	  profile_picture: rows[0].profile_picture,
+// 	  bio: rows[0].Bio,
+// 	  created_at: rows[0].created_at,
+// 	  posts: rows
+// 		.filter((row) => row.post_id) // Filter rows with posts
+// 		.map((post) => ({
+// 		  post_id: post.post_id,
+// 		  title: post.title,
+// 		  content: post.content,
+// 		  created_at: post.post_created_at,
+// 		})),
+// 	};
+// }
+
+export async function getUserProfileById(user_id) {
+	const query = `
+	  SELECT 
+	    u.username AS profile_username, 
+	    u.user_id,
+	    u.profile_picture, 
+	    u.Bio, 
+	    u.created_at, 
+	    u.user_type,
+	    p.post_id, 
+	    p.title, 
+	    p.content, 
+	    p.created_at AS post_created_at, 
+		p.photo_id,
+	    post_user.username AS post_author_username,
+	    COUNT(c.comment_id) AS comment_count
+	  FROM user u
+	  LEFT JOIN post p ON u.user_id = p.user_id
+	  LEFT JOIN user post_user ON p.user_id = post_user.user_id
+	  LEFT JOIN comment c ON p.post_id = c.post_id
+	  WHERE u.user_id = ?
+	  GROUP BY p.post_id, u.user_id, post_user.username
+	`;
+
+	const [rows] = await db.query(query, [user_id]);
+
+	if (!rows.length) {
+		return null; // No user found
+	}
+
+	// Format the user profile and posts
+	return {
+		username: rows[0].profile_username, // User's profile username
+		userRole: rows[0].user_type,
+		user_id: rows[0].user_id,
+		profile_picture: rows[0].profile_picture,
+		bio: rows[0].Bio,
+		created_at: rows[0].created_at,
+		posts: rows
+			.filter((row) => row.post_id) // Filter rows with posts
+			.map((post) => ({
+				post_id: post.post_id,
+				title: post.title,
+				content: post.content,
+				created_at: post.post_created_at,
+				username: post.post_author_username, // Author username
+				comment_count: post.comment_count || 0, // Number of comments
+				profile_picture: rows[0].profile_picture,
+				photo_id: post.photo_id,
+			})),
+	};
 }
 
 export async function getUser(username) {
@@ -91,8 +188,45 @@ export async function getUserByEmail(email) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE email = ?`, [email]);
 	return rows;
 }
+// change in userData
+// export async function getUserByEmail(email) {
+// 	const query = `
+// 	  SELECT u.*,
+// 			 p.post_id, p.title, p.content, p.created_at AS post_created_at
+// 	  FROM user u
+// 	  LEFT JOIN post p ON u.user_id = p.user_id
+// 	  WHERE u.email = ?
+// 	`;
 
-export async function createUser(username, email, password, type, Bio, profile_picture) {
+// 	const [rows] = await db.query(query, [email]);
+
+// 	return rows;
+
+// 	// if (!rows.length) {
+// 	//   return null; // Return null if no user is found
+// 	// }
+
+// 	// const user = {
+// 	//   ...rows[0], // Spread user details
+// 	//   posts: rows
+// 	// 	.filter((row) => row.post_id) // Filter rows with posts
+// 	// 	.map((post) => ({
+// 	// 	  post_id: post.post_id,
+// 	// 	  title: post.title,
+// 	// 	  content: post.content,
+// 	// 	  created_at: post.post_created_at,
+// 	// 	})),
+// 	// };
+// }
+
+export async function createUser(
+	username,
+	email,
+	password,
+	type,
+	Bio,
+	profile_picture
+) {
 	const result = await db.query(
 		`
     
@@ -123,13 +257,7 @@ function formatDateForMySQL(date) {
 }
 
 // In your `createEvent` function or wherever you call it
-export async function createEvent(
-	name,
-	url,
-	status,
-	event_at,
-	event_end_at
-) {
+export async function createEvent(name, url, status, event_at, event_end_at) {
 	// Format the event_at datetime for MySQL
 	console.log(event_at);
 	console.log(event_end_at);
@@ -154,22 +282,45 @@ export async function createEvent(
 	}
 }
 
-// post's functions
-export async function createPost(user_id, channel_id, title, content) {
-	const query = `INSERT INTO post (user_id, channel_id, title, content) VALUES (?, ?, ?, ?)`;
+export async function createPost(
+	user_id,
+	channel_id,
+	title,
+	content,
+	photo_id
+) {
+	const query = `INSERT INTO post (user_id, channel_id, title, content, photo_id) VALUES (?, ?, ?, ?, ?)`;
+
+	// Convert undefined to null
+	const params = [
+		user_id !== undefined ? user_id : null,
+		channel_id !== undefined ? channel_id : null,
+		title !== undefined ? title : null,
+		content !== undefined ? content : null,
+		photo_id !== undefined ? photo_id : null,
+	];
+
+	console.log("CHECKING Parameters:", params);
 
 	try {
-		const [result] = await db.execute(query, [
-			user_id,
-			channel_id,
-			title,
-			content,
-		]);
+		const [result] = await db.execute(query, params);
 		const id = result.insertId;
 		return getPost(id);
 	} catch (error) {
 		console.error("Error saving post:", error);
 		throw new Error("Database error: Could not save post");
+	}
+}
+
+export async function updatePostPhoto(postId, photoId) {
+	const query = `UPDATE post SET photo_id = ? WHERE post_id = ?`;
+
+	try {
+		const result = await db.execute(query, [photoId, postId]);
+		return result;
+	} catch (error) {
+		console.error("Error updating post photo:", error);
+		throw new Error("Database error: Could not update post photo");
 	}
 }
 
@@ -193,7 +344,7 @@ export async function getPostsByChannel(channel_id) {
 }
 
 export async function getAllPosts() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username, user.profile_picture,
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, post.photo_id, user.username, user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -256,14 +407,14 @@ export async function getComment(id) {
 
 export async function getPostWithComments(post_id) {
 	const postQuery = ` 
-	SELECT post.*, user.username, 
+	SELECT post.*, user.username, user.profile_picture,
 	(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 	FROM post
 	JOIN user ON post.user_id = user.user_id
 	WHERE post.post_id = ?`;
 
 	const commentsQuery = `
-	SELECT comment.comment_id, comment.post_id, comment.user_id, comment.parent_id, comment.content, comment.created_at, user.username
+	SELECT comment.comment_id, comment.post_id, comment.user_id, comment.parent_id, comment.content, comment.created_at, user.username, user.profile_picture
 	FROM comment
 	JOIN user ON comment.user_id = user.user_id
 	WHERE comment.post_id = ?
@@ -326,7 +477,7 @@ export async function updateComment(comment_id, content) {
 
 //function to filter channel
 export async function getCeramicPost() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, post.photo_id, user.username, user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -337,7 +488,7 @@ export async function getCeramicPost() {
 }
 
 export async function getPrintmakingPost() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, post.photo_id, user.username, user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -349,7 +500,7 @@ export async function getPrintmakingPost() {
 }
 
 export async function getFilmPost() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, post.photo_id , user.username, user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -465,20 +616,20 @@ async function testGetUsers() {
 }
 
 export async function followChannel(user_id, channel_id) {
-  const result = await db.query(
-    `
+	const result = await db.query(
+		`
 		INSERT INTO following (user_id, channel_id)
 		VALUES (?, ?)
 		`,
-    [user_id, channel_id]
-  );
+		[user_id, channel_id]
+	);
 
-  // Return confirmation or the inserted row
-  return {
-    message: "User followed the channel successfully",
-    user_id,
-    channel_id,
-  };
+	// Return confirmation or the inserted row
+	return {
+		message: "User followed the channel successfully",
+		user_id,
+		channel_id,
+	};
 }
 
 export async function getFollowingIds(channel_id) {
@@ -522,40 +673,39 @@ export async function getUserEmailById(user_id) {
 
 
 export async function unfollowChannel(user_id, channel_id) {
-  const result = await db.query(
-    `
+	const result = await db.query(
+		`
     DELETE FROM following
     WHERE user_id = ? AND channel_id = ?
     `,
-    [user_id, channel_id]
-  );
+		[user_id, channel_id]
+	);
 
-  // Return the number of affected rows or a message for confirmation
-  return result.affectedRows > 0
-    ? { message: "User successfully unfollowed the channel" }
-    : { message: "No matching record found" };
+	// Return the number of affected rows or a message for confirmation
+	return result.affectedRows > 0
+		? { message: "User successfully unfollowed the channel" }
+		: { message: "No matching record found" };
 }
 
 export async function isFollowing(user_id, channel_id) {
-  try {
-    const result = await db.query(
-      `
+	try {
+		const result = await db.query(
+			`
       SELECT 1 
       FROM following
       WHERE user_id = ? AND channel_id = ?
       LIMIT 1
       `,
-      [user_id, channel_id]
-    );
+			[user_id, channel_id]
+		);
 
-    // If the result has any rows, return true, otherwise false
-    return result[0].length > 0;
-  } catch (error) {
-    console.error("Error checking if user is following the channel:", error);
-    throw error; // Propagate the error for upstream handling
-  }
+		// If the result has any rows, return true, otherwise false
+		return result[0].length > 0;
+	} catch (error) {
+		console.error("Error checking if user is following the channel:", error);
+		throw error; // Propagate the error for upstream handling
+	}
 }
-
 
 //function to insert data into a database
 //takes in a list of values and a query string
