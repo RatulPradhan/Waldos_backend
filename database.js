@@ -632,6 +632,46 @@ export async function followChannel(user_id, channel_id) {
 	};
 }
 
+export async function getFollowingIds(channel_id) {
+  try {
+    // Query to get user IDs from the 'following' table
+    const [userIdsResult] = await pool.execute(
+      "SELECT user_id FROM following WHERE channel_id = ?",
+      [channel_id]
+    );
+
+    // Extract user IDs into an array
+    const userIds = userIdsResult.map((row) => row.user_id);
+    return userIds;
+  } catch (error) {
+    console.error("Error fetching following IDs:", error);
+    throw error;
+  }
+}
+
+export async function getUserEmailById(user_id) {
+  try {
+    // Query to get the user's email from the 'users' table
+    const [result] = await pool.execute(
+      "SELECT email FROM users WHERE user_id = ?",
+      [user_id]
+    );
+
+    // If a result is found, return the email
+    if (result.length > 0) {
+      return result[0].email;
+    }
+
+    // If no result is found, return null
+    return null;
+  } catch (error) {
+    console.error("Error fetching user email:", error);
+    throw error;
+  }
+}
+
+
+
 export async function unfollowChannel(user_id, channel_id) {
 	const result = await db.query(
 		`

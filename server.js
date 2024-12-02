@@ -44,6 +44,8 @@ import {
 	followChannel,
 	unfollowChannel,
 	isFollowing,
+  getFollowingIds,
+  getUserEmailById,
 } from "./database.js";
 
 import { fileURLToPath } from "url";
@@ -252,6 +254,39 @@ app.delete("/unfollow-channel", async (req, res) => {
 		console.error("Error unfollowing the channel:", error);
 		res.status(500).send({ message: "Internal server error" });
 	}
+});
+
+app.get("/send-following-emails", async (req, res) => {
+  const { channel_id, username, content } = req.query;
+
+  try {
+    // Get user IDs for the given channel
+    const userIds = await getFollowingIds(channel_id);
+
+    // If no users are following the channel, return an empty array
+    if (userIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Get emails for the user IDs
+    const emails = [];
+    for (const userId of userIds) {
+      const email = await getUserEmailById(userId);
+      if (email) {
+        emails.push(email);
+      }
+    }
+
+	emails.forEach((email) => {
+    	sendEmail(email, `Post from: ${username}`, content);
+    });
+
+    // Return the emails as the response
+    res.status(201).send({ message: "Announcement created and emails sent" });
+  } catch (error) {
+    console.error("Error fetching following emails:", error);
+    res.status(500).send("Internal Server Error");
+  }
 });
 
 // Route to check if a user is following a specific channel
