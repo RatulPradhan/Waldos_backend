@@ -6,43 +6,45 @@ import fs from "fs";
 import path from "path";
 import { sendEmail } from "./email.js";
 import {
-	getAllPosts,
-	createPost,
-	createComment,
-	getPostWithComments,
-	getUserByEmail,
-	getUsers,
-	insertData,
-	getPasswordByEmail,
-	deletePost,
-	updatePost,
-	getCeramicPost,
-	getPrintmakingPost,
-	getFilmPost,
-	addReport,
-	addReportComment,
-	updateComment,
-	likePost,
-	likeComment,
-	getPostLikes,
-	getCommentLikes,
-	getBannedUserEmails,
-	removeUserFromBanList,
-	banUser,
-	getEvents,
-	getUserBio,
-	getOngoingUpcomingEvents,
-	createEvent,
-	getUnbannedUsers,
-	getUserCreated_at,
-	updateUserProfilePicture,
-	updateBio,
-	updateUsername,
-	getAllReports,
+  getAllPosts,
+  createPost,
+  createComment,
+  getPostWithComments,
+  getUserByEmail,
+  getUsers,
+  insertData,
+  getPasswordByEmail,
+  deletePost,
+  updatePost,
+  getCeramicPost,
+  getPrintmakingPost,
+  getFilmPost,
+  addReport,
+  addReportComment,
+  updateComment,
+  likePost,
+  likeComment,
+  getPostLikes,
+  getCommentLikes,
+  getBannedUserEmails,
+  removeUserFromBanList,
+  banUser,
+  getEvents,
+  getUserBio,
+  getOngoingUpcomingEvents,
+  createEvent,
+  getUnbannedUsers,
+  getUserCreated_at,
+  updateUserProfilePicture,
+  updateBio,
+  updateUsername,
+  getAllReports,
   createUser,
   followChannel,
   unfollowChannel,
-  isFollowing
+  isFollowing,
+  getFollowingIds,
+  getUserEmailById,
 } from "./database.js";
 
 const app = express();
@@ -226,6 +228,38 @@ app.delete("/unfollow-channel", async (req, res) => {
   }
 });
 
+app.get("/send-following-emails", async (req, res) => {
+  const { channel_id, username, content } = req.query;
+
+  try {
+    // Get user IDs for the given channel
+    const userIds = await getFollowingIds(channel_id);
+
+    // If no users are following the channel, return an empty array
+    if (userIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Get emails for the user IDs
+    const emails = [];
+    for (const userId of userIds) {
+      const email = await getUserEmailById(userId);
+      if (email) {
+        emails.push(email);
+      }
+    }
+
+	emails.forEach((email) => {
+    	sendEmail(email, `Post from: ${username}`, content);
+    });
+
+    // Return the emails as the response
+    res.status(201).send({ message: "Announcement created and emails sent" });
+  } catch (error) {
+    console.error("Error fetching following emails:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 
 // Route to check if a user is following a specific channel
