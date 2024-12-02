@@ -46,6 +46,13 @@ import {
 	isFollowing,
 } from "./database.js";
 
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+import { v4 as uuidv4 } from "uuid";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -327,12 +334,6 @@ app.get("/posts", async (req, res) => {
 	res.send(posts);
 });
 
-app.post("/posts", async (req, res) => {
-	const { user_id, channel_id, title, content } = req.body;
-	const post = await createPost(user_id, channel_id, title, content);
-	res.status(201).send(post);
-});
-
 app.post("/create-user", async (req, res) => {
 	const { username, email, password, type, Bio, profile_picture } = req.body;
 	const user = await createUser(
@@ -460,6 +461,21 @@ app.post("/user/:user_id/username", async (req, res) => {
 	}
 });
 
+//update comment
+app.put("/comment/:id", async (req, res) => {
+	const commentId = req.params.id;
+	const { content } = req.body;
+
+	try {
+		await updateComment(commentId, content);
+		res.status(200).json({ message: "Comment updated successfully" });
+	} catch (err) {
+		res
+			.status(500)
+			.json({ message: "Error updating comment", error: err.message });
+	}
+});
+
 const storage = multer.diskStorage({
 	destination: (req, file, cb) => {
 		console.log("Setting destination for file upload"); // Log destination setting
@@ -510,18 +526,55 @@ app.post(
 	}
 );
 
-//update comment
-app.put("/comment/:id", async (req, res) => {
-	const commentId = req.params.id;
-	const { content } = req.body;
+const storagePostPhoto = multer.diskStorage({
+	destination: (req, file, cb) => {
+		console.log("Setting destination for file upload"); // Log destination setting
+		cb(null, "../Waldos_frontend/public/images/posts");
+	},
+	filename: (req, file, cb) => {
+		const unique_photo_id = Date.now();
+		const extension = path.extname(file.originalname);
+		cb(null, `${uuidv4()}${extension}`);
+	},
+});
+
+const uploadPostPhoto = multer({ storage: storagePostPhoto });
+
+// Updated /posts POST route with Multer
+app.post("/posts", uploadPostPhoto.single("image"), async (req, res) => {
+	const { user_id, channel_id, title, content } = req.body;
+	const image = req.file ? req.file.filename : null;
+
+	console.log("Received Data:", { user_id, channel_id, title, content, image });
+
+	// Validate required fields
+	if (!user_id || !channel_id || !title || !content) {
+		return res
+			.status(400)
+			.json({ message: "All fields except image are required" });
+	}
+
+	// Parse integers
+	const parsedUserId = parseInt(user_id, 10);
+	const parsedChannelId = parseInt(channel_id, 10);
+
+	// Check for parsing errors
+	if (isNaN(parsedUserId) || isNaN(parsedChannelId)) {
+		return res.status(400).json({ message: "Invalid user_id or channel_id" });
+	}
 
 	try {
-		await updateComment(commentId, content);
-		res.status(200).json({ message: "Comment updated successfully" });
-	} catch (err) {
-		res
-			.status(500)
-			.json({ message: "Error updating comment", error: err.message });
+		const post = await createPost(
+			parsedUserId,
+			parsedChannelId,
+			title,
+			content,
+			image
+		);
+		res.status(201).json(post);
+	} catch (error) {
+		console.error("Error creating post:", error);
+		res.status(500).json({ message: "Failed to create post" });
 	}
 });
 
