@@ -44,7 +44,15 @@ import {
 	followChannel,
 	unfollowChannel,
 	isFollowing,
-  getFollowingIds,
+	getPostOwner,
+	getCommentOwner,
+	addNotification,
+	getNotification,
+	getPostFromLike,
+	markNotificationAsRead,
+	removeLikeFromPost,
+	removeLikeFromComment,
+   getFollowingIds,
   getUserEmailById,
 } from "./database.js";
 
@@ -58,6 +66,29 @@ const __dirname = dirname(__filename);
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+//notification
+app.get('/notifications/:userId', async (req, res) => {
+    const userId = req.params.userId;
+    try {
+        const [notifications] = await getNotification(userId);
+        res.json(notifications);
+    } catch (error) {
+        res.status(500).send('Error fetching notifications');
+    }
+});
+
+app.put("/notifications/:id/read", async (req, res) => {
+	const { id } = req.params;
+  
+	try {
+	  await markNotificationAsRead(id); // Call the database function
+	  res.status(200).send("Notification marked as read");
+	} catch (error) {
+	  console.error("Error marking notification as read:", error);
+	  res.status(500).send("Failed to mark notification as read");
+	}
+});
 
 // Fetch user profile by user_id
 app.get("/user/id/:user_id", async (req, res) => {
@@ -123,7 +154,14 @@ app.get("/password/:email", async (req, res) => {
 app.post("/api/likePost", async (req, res) => {
 	const { post_id, user_id } = req.body;
 	try {
+		//fetch the owner of the post
+		const postOwner = await getPostOwner(post_id);
+
 		const like_count = await likePost(post_id, user_id);
+
+		//add notification
+		await addNotification(postOwner, user_id, post_id, null, "like_post");
+
 		res.json({ like_count });
 	} catch (error) {
 		console.error("Error liking post:", error);
@@ -135,7 +173,20 @@ app.post("/api/likePost", async (req, res) => {
 app.post("/api/likeComment", async (req, res) => {
 	const { comment_id, user_id } = req.body;
 	try {
+		//fetch the owner of the comment
+		const commentOwner = await getCommentOwner(comment_id);
+
+		const post_id = await getPostFromLike(comment_id);
+
+        if (!commentOwner) {
+            return res.status(404).send("Comment owner not found");
+        }
+
 		const like_count = await likeComment(comment_id, user_id);
+
+		//add notifications
+		await addNotification(commentOwner, user_id, post_id, comment_id, "like_comment");
+
 		res.json({ like_count });
 	} catch (error) {
 		console.error("Error liking comment:", error);
@@ -166,6 +217,31 @@ app.get("/api/commentLikes/:comment_id", async (req, res) => {
 		res.status(500).json({ error: "Failed to fetch comment likes" });
 	}
 });
+
+// unlike a post
+app.post('/api/unlikePost', async (req, res) => {
+    const { post_id, user_id } = req.body;
+    try {
+        await removeLikeFromPost(post_id, user_id);
+        res.status(200).json({ message: "Post unliked successfully." });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error unliking the post." });
+    }
+});
+
+//unlike a comment
+app.post('/api/unlikeComment', async (req, res) => {
+    const { comment_id, user_id } = req.body;
+    try {
+        await removeLikeFromComment(comment_id, user_id);
+        res.status(200).json({ message: "Comment unliked successfully." });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error unliking the comment." });
+    }
+});
+
 
 //filter channel
 app.get("/ceramic", async (req, res) => {
@@ -422,6 +498,21 @@ app.post("/posts/:post_id/comments", async (req, res) => {
 	const { post_id } = req.params;
 	const { user_id, content, parent_id } = req.body;
 	const comment = await createComment(post_id, user_id, content, parent_id);
+
+	if (parent_id) {
+		// reply to comment
+		const commentOwner = await getCommentOwner(parent_id); 
+		if (commentOwner && commentOwner !== user_id) {
+			await addNotification(commentOwner, user_id, post_id, parent_id, "reply_comment");
+		}
+	} else {
+		//reply to a post
+		const postOwner = await getPostOwner(post_id); 
+		if (postOwner && postOwner !== user_id) {
+			await addNotification(postOwner, user_id, post_id, null, "comment_post");
+		}
+	}
+
 	res.status(201).send(comment);
 });
 
