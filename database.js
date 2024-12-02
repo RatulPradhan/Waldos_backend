@@ -14,6 +14,53 @@ const db = mysql
 	})
 	.promise();
 
+
+//notifications
+
+export const getPostFromLike = async(commentId) => {
+	const query = `SELECT post_id FROM comment WHERE comment_id = ?`;
+    const [rows] = await db.execute(query, [commentId]);
+    return rows[0]?.post_id || null;
+}
+
+export const getPostOwner = async (postId) => {
+    const query = `SELECT user_id FROM post WHERE post_id = ?`;
+    const [rows] = await db.execute(query, [postId]);
+    return rows[0]?.user_id || null;
+};
+
+export const getCommentOwner = async (commentId) => {
+    const query = `SELECT user_id FROM comment WHERE comment_id = ?`;
+    const [rows] = await db.execute(query, [commentId]);
+    return rows[0]?.user_id || null;
+};
+
+export const addNotification = async (userId, senderId, postId, commentId, type) => {
+    const query = `
+        INSERT INTO notifications (user_id, sender_id, post_id, comment_id, type)
+        VALUES (?, ?, ?, ?, ?)
+    `;
+    await db.execute(query, [userId, senderId, postId, commentId, type]);
+};
+
+export const getNotification = async (userId) => {
+    const query = `SELECT n.*, u.username AS sender_name
+                   FROM notifications n
+                   JOIN user u ON n.sender_id = u.user_id
+                   WHERE n.user_id = ? ORDER BY n.created_at DESC`;
+    return await db.execute(query, [userId]);
+};
+
+export async function markNotificationAsRead(notificationId) {
+	try {
+	  const query = "UPDATE notifications SET is_read = TRUE WHERE id = ?";
+	  await db.query(query, [notificationId]);
+	} catch (error) {
+	  console.error("Error marking notification as read:", error);
+	  throw new Error("Database error: Could not mark notification as read");
+	}
+};
+
 export async function getUsers() {
 	const [rows] = await db.query("SELECT * FROM user;");
 	return rows;
@@ -321,7 +368,7 @@ export async function getPostsByChannel(channel_id) {
 }
 
 export async function getAllPosts() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username, user.profile_picture,
+	const query = `SELECT post.*, user.username, user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -371,11 +418,10 @@ export async function createComment(postId, userId, content, parent_id = null) {
 
 export async function getComment(id) {
 	const [rows] = await db.query(
-		`
-      SELECT * 
-      FROM comment
-      WHERE comment_id = ?
-  `,
+		`SELECT comment.*, user.username, user.profile_picture
+		FROM comment
+		JOIN user ON comment.user_id = user.user_id
+		WHERE comment.comment_id = ?`,
 		[id]
 	);
 
@@ -384,14 +430,14 @@ export async function getComment(id) {
 
 export async function getPostWithComments(post_id) {
 	const postQuery = ` 
-	SELECT post.*, user.username, 
+	SELECT post.*, user.username,user.profile_picture, 
 	(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 	FROM post
 	JOIN user ON post.user_id = user.user_id
 	WHERE post.post_id = ?`;
 
 	const commentsQuery = `
-	SELECT comment.comment_id, comment.post_id, comment.user_id, comment.parent_id, comment.content, comment.created_at, user.username
+	SELECT comment.*, user.username, user.profile_picture
 	FROM comment
 	JOIN user ON comment.user_id = user.user_id
 	WHERE comment.post_id = ?
@@ -454,7 +500,7 @@ export async function updateComment(comment_id, content) {
 
 //function to filter channel
 export async function getCeramicPost() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.*, user.username, user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -465,7 +511,7 @@ export async function getCeramicPost() {
 }
 
 export async function getPrintmakingPost() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.*, user.username, user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -477,7 +523,7 @@ export async function getPrintmakingPost() {
 }
 
 export async function getFilmPost() {
-	const query = `SELECT post.post_id, post.user_id, post.channel_id, post.title, post.content, post.created_at, user.username,
+	const query = `SELECT post.*, user.username,user.profile_picture,
 		(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 		FROM post
 		JOIN user ON post.user_id = user.user_id
@@ -547,7 +593,7 @@ export async function getPostLikes(post_id) {
 	const likeCountQuery =
 		"SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = ?";
 	const likedUsersQuery = `
-      SELECT user.user_id, user.username
+      SELECT user.user_id, user.username, user.profile_picture
       FROM post_likes
       JOIN user ON post_likes.user_id = user.user_id
       WHERE post_likes.post_id = ?
@@ -567,7 +613,7 @@ export async function getCommentLikes(comment_id) {
 	const likeCountQuery =
 		"SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = ?";
 	const likedUsersQuery = `
-      SELECT user.user_id, user.username
+      SELECT user.user_id, user.username, user.profile_picture
       FROM comment_likes
       JOIN user ON comment_likes.user_id = user.user_id
       WHERE comment_likes.comment_id = ?
@@ -581,6 +627,26 @@ export async function getCommentLikes(comment_id) {
 		liked_by_users: likedUsersResult,
 	};
 }
+
+//delete like from post
+export async function removeLikeFromPost(postId, userId) {
+    const query = `
+        DELETE FROM post_likes
+        WHERE post_id = ? AND user_id = ?;
+    `;
+    return db.execute(query, [postId, userId]);
+}
+
+//delete like from comment
+export async function removeLikeFromComment(commentId, userId) {
+    const query = `
+        DELETE FROM comment_likes
+        WHERE comment_id = ? AND user_id = ?;
+    `;
+    return db.execute(query, [commentId, userId]);
+}
+
+
 
 // Function to test getUsers
 async function testGetUsers() {
