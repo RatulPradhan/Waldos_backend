@@ -14,52 +14,57 @@ const db = mysql
 	})
 	.promise();
 
-
 //notifications
 
-export const getPostFromLike = async(commentId) => {
+export const getPostFromLike = async (commentId) => {
 	const query = `SELECT post_id FROM comment WHERE comment_id = ?`;
-    const [rows] = await db.execute(query, [commentId]);
-    return rows[0]?.post_id || null;
-}
+	const [rows] = await db.execute(query, [commentId]);
+	return rows[0]?.post_id || null;
+};
 
 export const getPostOwner = async (postId) => {
-    const query = `SELECT user_id FROM post WHERE post_id = ?`;
-    const [rows] = await db.execute(query, [postId]);
-    return rows[0]?.user_id || null;
+	const query = `SELECT user_id FROM post WHERE post_id = ?`;
+	const [rows] = await db.execute(query, [postId]);
+	return rows[0]?.user_id || null;
 };
 
 export const getCommentOwner = async (commentId) => {
-    const query = `SELECT user_id FROM comment WHERE comment_id = ?`;
-    const [rows] = await db.execute(query, [commentId]);
-    return rows[0]?.user_id || null;
+	const query = `SELECT user_id FROM comment WHERE comment_id = ?`;
+	const [rows] = await db.execute(query, [commentId]);
+	return rows[0]?.user_id || null;
 };
 
-export const addNotification = async (userId, senderId, postId, commentId, type) => {
-    const query = `
+export const addNotification = async (
+	userId,
+	senderId,
+	postId,
+	commentId,
+	type
+) => {
+	const query = `
         INSERT INTO notifications (user_id, sender_id, post_id, comment_id, type)
         VALUES (?, ?, ?, ?, ?)
     `;
-    await db.execute(query, [userId, senderId, postId, commentId, type]);
+	await db.execute(query, [userId, senderId, postId, commentId, type]);
 };
 
 export const getNotification = async (userId) => {
-    const query = `SELECT n.*, u.username AS sender_name
+	const query = `SELECT n.*, u.username AS sender_name
                    FROM notifications n
                    JOIN user u ON n.sender_id = u.user_id
                    WHERE n.user_id = ? ORDER BY n.created_at DESC`;
-    return await db.execute(query, [userId]);
+	return await db.execute(query, [userId]);
 };
 
 export async function markNotificationAsRead(notificationId) {
 	try {
-	  const query = "UPDATE notifications SET is_read = TRUE WHERE id = ?";
-	  await db.query(query, [notificationId]);
+		const query = "UPDATE notifications SET is_read = TRUE WHERE id = ?";
+		await db.query(query, [notificationId]);
 	} catch (error) {
-	  console.error("Error marking notification as read:", error);
-	  throw new Error("Database error: Could not mark notification as read");
+		console.error("Error marking notification as read:", error);
+		throw new Error("Database error: Could not mark notification as read");
 	}
-};
+}
 
 export async function getUsers() {
 	const [rows] = await db.query("SELECT * FROM user;");
@@ -653,23 +658,21 @@ export async function getCommentLikes(comment_id) {
 
 //delete like from post
 export async function removeLikeFromPost(postId, userId) {
-    const query = `
+	const query = `
         DELETE FROM post_likes
         WHERE post_id = ? AND user_id = ?;
     `;
-    return db.execute(query, [postId, userId]);
+	return db.execute(query, [postId, userId]);
 }
 
 //delete like from comment
 export async function removeLikeFromComment(commentId, userId) {
-    const query = `
+	const query = `
         DELETE FROM comment_likes
         WHERE comment_id = ? AND user_id = ?;
     `;
-    return db.execute(query, [commentId, userId]);
+	return db.execute(query, [commentId, userId]);
 }
-
-
 
 // Function to test getUsers
 async function testGetUsers() {
@@ -699,44 +702,42 @@ export async function followChannel(user_id, channel_id) {
 }
 
 export async function getFollowingIds(channel_id) {
-  try {
-    // Query to get user IDs from the 'following' table
-    const [userIdsResult] = await pool.execute(
-      "SELECT user_id FROM following WHERE channel_id = ?",
-      [channel_id]
-    );
+	try {
+		// Query to get user IDs from the 'following' table
+		const [userIdsResult] = await pool.execute(
+			"SELECT user_id FROM following WHERE channel_id = ?",
+			[channel_id]
+		);
 
-    // Extract user IDs into an array
-    const userIds = userIdsResult.map((row) => row.user_id);
-    return userIds;
-  } catch (error) {
-    console.error("Error fetching following IDs:", error);
-    throw error;
-  }
+		// Extract user IDs into an array
+		const userIds = userIdsResult.map((row) => row.user_id);
+		return userIds;
+	} catch (error) {
+		console.error("Error fetching following IDs:", error);
+		throw error;
+	}
 }
 
 export async function getUserEmailById(user_id) {
-  try {
-    // Query to get the user's email from the 'users' table
-    const [result] = await pool.execute(
-      "SELECT email FROM users WHERE user_id = ?",
-      [user_id]
-    );
+	try {
+		// Query to get the user's email from the 'users' table
+		const [result] = await pool.execute(
+			"SELECT email FROM users WHERE user_id = ?",
+			[user_id]
+		);
 
-    // If a result is found, return the email
-    if (result.length > 0) {
-      return result[0].email;
-    }
+		// If a result is found, return the email
+		if (result.length > 0) {
+			return result[0].email;
+		}
 
-    // If no result is found, return null
-    return null;
-  } catch (error) {
-    console.error("Error fetching user email:", error);
-    throw error;
-  }
+		// If no result is found, return null
+		return null;
+	} catch (error) {
+		console.error("Error fetching user email:", error);
+		throw error;
+	}
 }
-
-
 
 export async function unfollowChannel(user_id, channel_id) {
 	const result = await db.query(
