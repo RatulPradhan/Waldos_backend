@@ -112,27 +112,27 @@ export async function getUserByID(id) {
 // fetch other user
 // export async function getUserProfileById(user_id) {
 // 	const query = `
-// 	  SELECT u.username, 
+// 	  SELECT u.username,
 // 	  		 u.user_id,
-// 			 u.profile_picture, 
-// 			 u.Bio, 
-// 			 u.created_at, 
+// 			 u.profile_picture,
+// 			 u.Bio,
+// 			 u.created_at,
 // 			 u.user_type,
-// 			 p.post_id, 
-// 			 p.title, 
-// 			 p.content, 
+// 			 p.post_id,
+// 			 p.title,
+// 			 p.content,
 // 			 p.created_at AS post_created_at
 // 	  FROM user u
 // 	  LEFT JOIN post p ON u.user_id = p.user_id
 // 	  WHERE u.user_id = ?
 // 	`;
-  
+
 // 	const [rows] = await db.query(query, [user_id]);
-  
+
 // 	if (!rows.length) {
 // 	  return null; // No user found
 // 	}
-  
+
 // 	// Format the user profile and posts
 // 	return {
 // 	  username: rows[0].username,
@@ -164,7 +164,8 @@ export async function getUserProfileById(user_id) {
 	    p.post_id, 
 	    p.title, 
 	    p.content, 
-	    p.created_at AS post_created_at,
+	    p.created_at AS post_created_at, 
+		p.photo_id,
 	    post_user.username AS post_author_username,
 	    COUNT(c.comment_id) AS comment_count
 	  FROM user u
@@ -198,13 +199,11 @@ export async function getUserProfileById(user_id) {
 				created_at: post.post_created_at,
 				username: post.post_author_username, // Author username
 				comment_count: post.comment_count || 0, // Number of comments
-				profile_picture: rows[0].profile_picture
+				profile_picture: rows[0].profile_picture,
+				photo_id: post.photo_id,
 			})),
 	};
 }
-
-  
-  
 
 export async function getUser(username) {
 	const [rows] = await db.query(`SELECT * FROM user WHERE username = ?`, [
@@ -239,21 +238,21 @@ export async function getUserByEmail(email) {
 // change in userData
 // export async function getUserByEmail(email) {
 // 	const query = `
-// 	  SELECT u.*, 
+// 	  SELECT u.*,
 // 			 p.post_id, p.title, p.content, p.created_at AS post_created_at
 // 	  FROM user u
 // 	  LEFT JOIN post p ON u.user_id = p.user_id
 // 	  WHERE u.email = ?
 // 	`;
-  
+
 // 	const [rows] = await db.query(query, [email]);
 
 // 	return rows;
-  
+
 // 	// if (!rows.length) {
 // 	//   return null; // Return null if no user is found
 // 	// }
-  
+
 // 	// const user = {
 // 	//   ...rows[0], // Spread user details
 // 	//   posts: rows
@@ -267,7 +266,14 @@ export async function getUserByEmail(email) {
 // 	// };
 // }
 
-export async function createUser(username, email, password, type, Bio, profile_picture) {
+export async function createUser(
+	username,
+	email,
+	password,
+	type,
+	Bio,
+	profile_picture
+) {
 	const result = await db.query(
 		`
     
@@ -298,13 +304,7 @@ function formatDateForMySQL(date) {
 }
 
 // In your `createEvent` function or wherever you call it
-export async function createEvent(
-	name,
-	url,
-	status,
-	event_at,
-	event_end_at
-) {
+export async function createEvent(name, url, status, event_at, event_end_at) {
 	// Format the event_at datetime for MySQL
 	console.log(event_at);
 	console.log(event_end_at);
@@ -329,22 +329,45 @@ export async function createEvent(
 	}
 }
 
-// post's functions
-export async function createPost(user_id, channel_id, title, content) {
-	const query = `INSERT INTO post (user_id, channel_id, title, content) VALUES (?, ?, ?, ?)`;
+export async function createPost(
+	user_id,
+	channel_id,
+	title,
+	content,
+	photo_id
+) {
+	const query = `INSERT INTO post (user_id, channel_id, title, content, photo_id) VALUES (?, ?, ?, ?, ?)`;
+
+	// Convert undefined to null
+	const params = [
+		user_id !== undefined ? user_id : null,
+		channel_id !== undefined ? channel_id : null,
+		title !== undefined ? title : null,
+		content !== undefined ? content : null,
+		photo_id !== undefined ? photo_id : null,
+	];
+
+	console.log("CHECKING Parameters:", params);
 
 	try {
-		const [result] = await db.execute(query, [
-			user_id,
-			channel_id,
-			title,
-			content,
-		]);
+		const [result] = await db.execute(query, params);
 		const id = result.insertId;
 		return getPost(id);
 	} catch (error) {
 		console.error("Error saving post:", error);
 		throw new Error("Database error: Could not save post");
+	}
+}
+
+export async function updatePostPhoto(postId, photoId) {
+	const query = `UPDATE post SET photo_id = ? WHERE post_id = ?`;
+
+	try {
+		const result = await db.execute(query, [photoId, postId]);
+		return result;
+	} catch (error) {
+		console.error("Error updating post photo:", error);
+		throw new Error("Database error: Could not update post photo");
 	}
 }
 
@@ -430,7 +453,7 @@ export async function getComment(id) {
 
 export async function getPostWithComments(post_id) {
 	const postQuery = ` 
-	SELECT post.*, user.username,user.profile_picture, 
+	SELECT post.*, user.username, user.profile_picture,
 	(SELECT COUNT(*) FROM comment WHERE comment.post_id = post.post_id) AS comment_count
 	FROM post
 	JOIN user ON post.user_id = user.user_id
@@ -659,57 +682,96 @@ async function testGetUsers() {
 }
 
 export async function followChannel(user_id, channel_id) {
-  const result = await db.query(
-    `
+	const result = await db.query(
+		`
 		INSERT INTO following (user_id, channel_id)
 		VALUES (?, ?)
 		`,
-    [user_id, channel_id]
-  );
+		[user_id, channel_id]
+	);
 
-  // Return confirmation or the inserted row
-  return {
-    message: "User followed the channel successfully",
-    user_id,
-    channel_id,
-  };
+	// Return confirmation or the inserted row
+	return {
+		message: "User followed the channel successfully",
+		user_id,
+		channel_id,
+	};
 }
 
+export async function getFollowingIds(channel_id) {
+  try {
+    // Query to get user IDs from the 'following' table
+    const [userIdsResult] = await pool.execute(
+      "SELECT user_id FROM following WHERE channel_id = ?",
+      [channel_id]
+    );
+
+    // Extract user IDs into an array
+    const userIds = userIdsResult.map((row) => row.user_id);
+    return userIds;
+  } catch (error) {
+    console.error("Error fetching following IDs:", error);
+    throw error;
+  }
+}
+
+export async function getUserEmailById(user_id) {
+  try {
+    // Query to get the user's email from the 'users' table
+    const [result] = await pool.execute(
+      "SELECT email FROM users WHERE user_id = ?",
+      [user_id]
+    );
+
+    // If a result is found, return the email
+    if (result.length > 0) {
+      return result[0].email;
+    }
+
+    // If no result is found, return null
+    return null;
+  } catch (error) {
+    console.error("Error fetching user email:", error);
+    throw error;
+  }
+}
+
+
+
 export async function unfollowChannel(user_id, channel_id) {
-  const result = await db.query(
-    `
+	const result = await db.query(
+		`
     DELETE FROM following
     WHERE user_id = ? AND channel_id = ?
     `,
-    [user_id, channel_id]
-  );
+		[user_id, channel_id]
+	);
 
-  // Return the number of affected rows or a message for confirmation
-  return result.affectedRows > 0
-    ? { message: "User successfully unfollowed the channel" }
-    : { message: "No matching record found" };
+	// Return the number of affected rows or a message for confirmation
+	return result.affectedRows > 0
+		? { message: "User successfully unfollowed the channel" }
+		: { message: "No matching record found" };
 }
 
 export async function isFollowing(user_id, channel_id) {
-  try {
-    const result = await db.query(
-      `
+	try {
+		const result = await db.query(
+			`
       SELECT 1 
       FROM following
       WHERE user_id = ? AND channel_id = ?
       LIMIT 1
       `,
-      [user_id, channel_id]
-    );
+			[user_id, channel_id]
+		);
 
-    // If the result has any rows, return true, otherwise false
-    return result[0].length > 0;
-  } catch (error) {
-    console.error("Error checking if user is following the channel:", error);
-    throw error; // Propagate the error for upstream handling
-  }
+		// If the result has any rows, return true, otherwise false
+		return result[0].length > 0;
+	} catch (error) {
+		console.error("Error checking if user is following the channel:", error);
+		throw error; // Propagate the error for upstream handling
+	}
 }
-
 
 //function to insert data into a database
 //takes in a list of values and a query string
